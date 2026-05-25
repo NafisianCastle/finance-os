@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { addTransaction } from "@/application/transactions";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { addTransaction } from "@/application/transactions";
-import { bdtToPoisha } from "@/lib/money";
-import { TX_TYPES } from "@/lib/constants";
 import type { Account } from "@/infrastructure/db/dexie/schema";
+import { TX_TYPES } from "@/lib/constants";
+import { bdtToPoisha } from "@/lib/money";
+import { useAppStore } from "@/store/app-store";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function NewTransactionPage() {
   const router = useRouter();
@@ -21,8 +21,10 @@ export default function NewTransactionPage() {
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("food");
   const [accountId, setAccountId] = useState("");
+  const [toAccountId, setToAccountId] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!userId) return;
@@ -74,7 +76,12 @@ export default function NewTransactionPage() {
         </div>
         <div className="space-y-2">
           <Label>Amount (BDT)</Label>
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <Input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
         </div>
         <div className="space-y-2">
           <Label>Account</Label>
@@ -98,13 +105,22 @@ export default function NewTransactionPage() {
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
             >
-              {["food", "transport", "shopping", "gadgets", "entertainment", "bills", "family", "education", "health", "other"].map(
-                (c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                )
-              )}
+              {[
+                "food",
+                "transport",
+                "shopping",
+                "gadgets",
+                "entertainment",
+                "bills",
+                "family",
+                "education",
+                "health",
+                "other",
+              ].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </div>
         )}
