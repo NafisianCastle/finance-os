@@ -3,6 +3,8 @@ import { HELD_STATUS, TX_TYPES } from "@/lib/constants";
 import { ymKey } from "@/lib/utils";
 import type { RuleContext } from "@/domain/rules-engine/types";
 import { subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
+import { computePortfolioValue } from "@/domain/investments/calculate";
+import type { InvestmentEvent } from "@/infrastructure/db/dexie/schema";
 
 export async function buildRuleContext(
   userId: string,
@@ -16,6 +18,18 @@ export async function buildRuleContext(
   const held = await db.heldLiabilities.where("userId").equals(userId).filter((h) => !h.deletedAt && h.status === HELD_STATUS.ACTIVE).toArray();
   const goals = await db.goals.where("userId").equals(userId).filter((g) => !g.deletedAt).toArray();
   const investments = await db.investments.where("userId").equals(userId).filter((i) => !i.deletedAt).toArray();
+  const invEvents = await db.investmentEvents
+    .where("userId")
+    .equals(userId)
+    .filter((e) => !e.deletedAt)
+    .toArray();
+  const eventsByInv = new Map<string, InvestmentEvent[]>();
+  for (const e of invEvents) {
+    const list = eventsByInv.get(e.investmentId) ?? [];
+    list.push(e);
+    eventsByInv.set(e.investmentId, list);
+  }
+  const portfolioValue = computePortfolioValue(investments, eventsByInv);
   const ym = ymKey();
   const budgets = await getDb()
     .budgets.filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt)
@@ -97,7 +111,7 @@ export async function buildRuleContext(
     emergencyFundTargetPoisha: emergencyTarget,
     emergencyFundCurrentPoisha: emergencyCurrent,
     primaryGoalMonthlySurplusPoisha: surplus,
-    investmentValuePoisha: investments.reduce((s, i) => s + i.currentValuePoisha, 0),
+    investmentValuePoisha: portfolioValue,
     impulseExpenseShare: totalExpenses > 0 ? impulseExpenses / totalExpenses : 0,
     categorySpendTrendPct: trendPct,
   };

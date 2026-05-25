@@ -6,6 +6,8 @@ import { computeMaturityScore } from "@/domain/rules-engine/maturity.rules";
 import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from "date-fns";
 import { ymKey } from "@/lib/utils";
+import { computePortfolioValue } from "@/domain/investments/calculate";
+import type { InvestmentEvent } from "@/infrastructure/db/dexie/schema";
 
 export async function getDashboardMetrics(userId: string) {
   const db = getDb();
@@ -15,6 +17,18 @@ export async function getDashboardMetrics(userId: string) {
   const held = await db.heldLiabilities.where("userId").equals(userId).filter((h) => !h.deletedAt && h.status === HELD_STATUS.ACTIVE).toArray();
   const loans = await db.loansGiven.where("userId").equals(userId).filter((l) => !l.deletedAt && l.status !== LOAN_STATUS.RECOVERED).toArray();
   const investments = await db.investments.where("userId").equals(userId).filter((i) => !i.deletedAt).toArray();
+  const invEvents = await db.investmentEvents
+    .where("userId")
+    .equals(userId)
+    .filter((e) => !e.deletedAt)
+    .toArray();
+  const eventsByInv = new Map<string, InvestmentEvent[]>();
+  for (const e of invEvents) {
+    const list = eventsByInv.get(e.investmentId) ?? [];
+    list.push(e);
+    eventsByInv.set(e.investmentId, list);
+  }
+  const portfolioValue = computePortfolioValue(investments, eventsByInv);
   const profile = await db.userProfiles.where("userId").equals(userId).first();
   const ym = ymKey();
   const budgets = await db.budgets.filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt).toArray();
@@ -26,7 +40,7 @@ export async function getDashboardMetrics(userId: string) {
 
   const netWorth = calculateNetWorth({
     cashBankWalletPoisha: cashBankWallet,
-    investmentValuePoisha: investments.reduce((s, i) => s + i.currentValuePoisha, 0),
+    investmentValuePoisha: portfolioValue,
     loansReceivablePoisha: loans.reduce((s, l) => s + l.remainingPoisha, 0),
     totalDebtPoisha: debts.reduce((s, d) => s + d.remainingPoisha, 0),
     creditUsedPoisha: creditUsed,

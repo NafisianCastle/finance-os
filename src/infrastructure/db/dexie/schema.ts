@@ -88,10 +88,24 @@ export interface Goal extends BaseRecord {
 export interface Investment extends BaseRecord {
   type: number;
   name: string;
+  /** Investor or project label */
+  investorName?: string;
   investedPoisha: number;
-  currentValuePoisha: number;
-  startDate: string;
-  maturityDate?: string;
+  /** @deprecated Use effectiveValue from metrics; kept for migration */
+  currentValuePoisha?: number;
+  projectStartDate: string;
+  projectEndDate?: string;
+  /** Profit declared upfront by investor (BDT poisha) */
+  declaredProfitPoisha?: number;
+  status: number;
+  note?: string;
+}
+
+export interface InvestmentEvent extends BaseRecord {
+  investmentId: string;
+  type: number;
+  amountPoisha: number;
+  eventDate: string;
   note?: string;
 }
 

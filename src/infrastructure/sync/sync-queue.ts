@@ -86,6 +86,7 @@ export async function pullRemoteChanges(
     "held_liabilities",
     "goals",
     "investments",
+    "investment_events",
     "buy_evaluations",
     "user_profiles",
   ] as const;

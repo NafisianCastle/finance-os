@@ -1,25 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { seedUserData } from "@/application/seed";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { seedUserData } from "@/application/seed";
-import { useAppStore, LOCAL_USER_ID } from "@/store/app-store";
+import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
+import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const setUserId = useAppStore((s) => s.setUserId);
+  const userId = useAppStore((s) => s.userId);
   const [income, setIncome] = useState("20000");
   const [loading, setLoading] = useState(false);
+  const authConfigured = isSupabaseConfigured();
+
+  useEffect(() => {
+    if (authConfigured && (!userId || userId === LOCAL_USER_ID)) {
+      router.replace("/login");
+    }
+  }, [authConfigured, router, userId]);
 
   async function handleStart() {
+    if (authConfigured && (!userId || userId === LOCAL_USER_ID)) return;
+
     setLoading(true);
-    const userId = LOCAL_USER_ID;
-    setUserId(userId);
-    await seedUserData(userId, parseFloat(income) || 20000);
+    const currentUserId = userId ?? LOCAL_USER_ID;
+    setUserId(currentUserId);
+    await seedUserData(currentUserId, parseFloat(income) || 20000);
     setLoading(false);
     router.push("/dashboard");
   }
@@ -30,7 +41,8 @@ export default function OnboardingPage() {
         <CardHeader>
           <CardTitle className="text-2xl">Welcome to Finance OS</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Your personal financial intelligence assistant. Default currency: BDT (৳).
+            Your personal financial intelligence assistant. Default currency:
+            BDT (৳).
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -44,7 +56,12 @@ export default function OnboardingPage() {
               placeholder="20000"
             />
           </div>
-          <Button className="w-full" size="lg" onClick={handleStart} disabled={loading}>
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={handleStart}
+            disabled={loading}
+          >
             {loading ? "Setting up…" : "Get started"}
           </Button>
           <p className="text-center text-xs text-muted-foreground">

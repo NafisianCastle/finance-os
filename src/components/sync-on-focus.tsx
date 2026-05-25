@@ -22,8 +22,13 @@ export function SyncOnFocus() {
 
     const onFocus = () => sync();
     window.addEventListener("focus", onFocus);
+    const intervalId = window.setInterval(sync, 1000 * 60 * 5); // sync every 5 minutes
+
     sync();
-    return () => window.removeEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(intervalId);
+    };
   }, [setPending]);
 
   return null;

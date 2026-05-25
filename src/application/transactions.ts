@@ -19,31 +19,37 @@ export async function addTransaction(
     syncStatus: "pending",
   };
 
-  await db.transaction("rw", [db.transactions, db.accounts], async () => {
+  const accountUpdates: { id: string; balance_poisha: number }[] = [];
+
+  await db.transaction("rw", db.transactions, db.accounts, async () => {
     await db.transactions.add(tx);
     const account = await db.accounts.get(data.accountId);
-    if (account) {
-      if (data.type === TX_TYPES.INCOME) {
-        const bal = account.balancePoisha + data.amountPoisha;
-        await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
-        await enqueueSync("accounts", account.id, "upsert", { id: account.id, balance_poisha: bal });
-      } else if (data.type === TX_TYPES.EXPENSE) {
-        const bal = account.balancePoisha - data.amountPoisha;
-        await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
-        await enqueueSync("accounts", account.id, "upsert", { id: account.id, balance_poisha: bal });
-      } else if (data.type === TX_TYPES.TRANSFER && data.toAccountId) {
-        const fromBal = account.balancePoisha - data.amountPoisha;
-        await db.accounts.update(account.id, { balancePoisha: fromBal, updatedAt: now });
-        await enqueueSync("accounts", account.id, "upsert", { id: account.id, balance_poisha: fromBal });
-        const to = await db.accounts.get(data.toAccountId);
-        if (to) {
-          const toBal = to.balancePoisha + data.amountPoisha;
-          await db.accounts.update(to.id, { balancePoisha: toBal, updatedAt: now });
-          await enqueueSync("accounts", to.id, "upsert", { id: to.id, balance_poisha: toBal });
-        }
+    if (!account) return;
+
+    if (data.type === TX_TYPES.INCOME) {
+      const bal = account.balancePoisha + data.amountPoisha;
+      await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
+      accountUpdates.push({ id: account.id, balance_poisha: bal });
+    } else if (data.type === TX_TYPES.EXPENSE) {
+      const bal = account.balancePoisha - data.amountPoisha;
+      await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
+      accountUpdates.push({ id: account.id, balance_poisha: bal });
+    } else if (data.type === TX_TYPES.TRANSFER && data.toAccountId) {
+      const fromBal = account.balancePoisha - data.amountPoisha;
+      await db.accounts.update(account.id, { balancePoisha: fromBal, updatedAt: now });
+      accountUpdates.push({ id: account.id, balance_poisha: fromBal });
+      const to = await db.accounts.get(data.toAccountId);
+      if (to) {
+        const toBal = to.balancePoisha + data.amountPoisha;
+        await db.accounts.update(to.id, { balancePoisha: toBal, updatedAt: now });
+        accountUpdates.push({ id: to.id, balance_poisha: toBal });
       }
     }
   });
+
+  for (const acc of accountUpdates) {
+    await enqueueSync("accounts", acc.id, "upsert", acc);
+  }
 
   await enqueueSync("transactions", tx.id, "upsert", {
     id: tx.id,

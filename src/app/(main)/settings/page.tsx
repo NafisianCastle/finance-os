@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { useAppStore } from "@/store/app-store";
-import { getDb } from "@/infrastructure/db/dexie/database";
-import { bdtToPoisha } from "@/lib/money";
-import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
+import { getDb, resetLocalDatabase } from "@/infrastructure/db/dexie/database";
+import {
+  createClient,
+  isSupabaseConfigured,
+} from "@/infrastructure/supabase/client";
 import { processSyncQueue } from "@/infrastructure/sync/sync-queue";
+import { bdtToPoisha } from "@/lib/money";
+import { useAppStore } from "@/store/app-store";
 import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -37,7 +40,10 @@ export default function SettingsPage() {
 
   async function saveProfile() {
     if (!userId) return;
-    const profile = await getDb().userProfiles.where("userId").equals(userId).first();
+    const profile = await getDb()
+      .userProfiles.where("userId")
+      .equals(userId)
+      .first();
     if (!profile) return;
     const now = new Date().toISOString();
     await getDb().userProfiles.update(profile.id, {
@@ -54,7 +60,17 @@ export default function SettingsPage() {
     setSyncing(false);
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    if (isSupabaseConfigured()) {
+      const supabase = createClient();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+      setUserId(null);
+      router.push("/login");
+      return;
+    }
+
     setUserId(null);
     router.push("/onboarding");
   }
@@ -66,9 +82,17 @@ export default function SettingsPage() {
           <CardContent className="pt-4 space-y-3">
             <div className="space-y-2">
               <Label>Monthly income (BDT)</Label>
-              <Input type="number" value={income} onChange={(e) => setIncome(e.target.value)} />
+              <Input
+                type="number"
+                value={income}
+                onChange={(e) => setIncome(e.target.value)}
+              />
             </div>
-            <Button onClick={saveProfile} variant="secondary" className="w-full">
+            <Button
+              onClick={saveProfile}
+              variant="secondary"
+              className="w-full"
+            >
               Save income
             </Button>
           </CardContent>
@@ -77,7 +101,9 @@ export default function SettingsPage() {
         <Card>
           <CardContent className="pt-4 space-y-3">
             <p className="text-sm font-medium">Currency</p>
-            <p className="text-sm text-muted-foreground">BDT (৳) — default for Bangladesh</p>
+            <p className="text-sm text-muted-foreground">
+              BDT (৳) — default for Bangladesh
+            </p>
             <p className="text-sm font-medium mt-2">Cloud sync</p>
             <p className="text-sm text-muted-foreground">
               {isSupabaseConfigured()
@@ -85,11 +111,17 @@ export default function SettingsPage() {
                 : "Offline mode — add NEXT_PUBLIC_SUPABASE_URL and ANON_KEY to .env.local"}
             </p>
             {isSupabaseConfigured() && (
-              <Button onClick={handleSync} disabled={syncing} className="w-full">
+              <Button
+                onClick={handleSync}
+                disabled={syncing}
+                className="w-full"
+              >
                 {syncing ? "Syncing…" : "Sync now"}
               </Button>
             )}
-            {syncMsg && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
+            {syncMsg && (
+              <p className="text-xs text-muted-foreground">{syncMsg}</p>
+            )}
           </CardContent>
         </Card>
 
@@ -101,10 +133,32 @@ export default function SettingsPage() {
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
             </Button>
           </CardContent>
         </Card>
+
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={async () => {
+            if (
+              confirm(
+                "Fix database errors? This clears all local Finance OS data and returns you to onboarding.",
+              )
+            ) {
+              await resetLocalDatabase();
+              setUserId(null);
+              router.push("/onboarding");
+            }
+          }}
+        >
+          Repair local database
+        </Button>
 
         <Button variant="destructive" className="w-full" onClick={handleLogout}>
           Reset local session
