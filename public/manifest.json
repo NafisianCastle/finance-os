@@ -1,0 +1,18 @@
+{
+  "name": "Finance OS",
+  "short_name": "FinanceOS",
+  "description": "Personal financial intelligence assistant",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d9488",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
