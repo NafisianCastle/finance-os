@@ -51,7 +51,7 @@ export default function LiabilitiesPage() {
       createdAt: now,
       updatedAt: now,
     };
-    await getDb().heldLiabilities.add(h);
+    await getDb().heldLiabilities.put(h as never);
     await enqueueSync("held_liabilities", h.id, "upsert", {
       id: h.id,
       owner: h.owner,

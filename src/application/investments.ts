@@ -60,7 +60,7 @@ export async function createInvestment(
     createdAt: now,
     updatedAt: now,
   };
-  await db.investments.add(rec);
+  await db.investments.put(rec as never);
   await enqueueSync("investments", rec.id, "upsert", leanInvestment(rec));
   return rec;
 }
@@ -83,7 +83,7 @@ export async function addInvestmentEvent(
     createdAt: now,
     updatedAt: now,
   };
-  await db.investmentEvents.add(ev);
+  await db.investmentEvents.put(ev as never);
 
   const inv = await db.investments.get(investmentId);
   if (inv) {

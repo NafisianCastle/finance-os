@@ -42,7 +42,7 @@ export default function GoalsPage() {
       createdAt: now,
       updatedAt: now,
     };
-    await getDb().goals.add(g);
+    await getDb().goals.put(g as never);
     await enqueueSync("goals", g.id, "upsert", {
       id: g.id,
       name: g.name,

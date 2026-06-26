@@ -63,7 +63,7 @@ export default function DebtPage() {
       createdAt: now,
       updatedAt: now,
     };
-    await getDb().debts.add(d);
+    await getDb().debts.put(d as never);
     await enqueueSync("debts", d.id, "upsert", {
       id: d.id,
       lender: d.lender,

@@ -47,7 +47,7 @@ export default function LoansGivenPage() {
       createdAt: now,
       updatedAt: now,
     };
-    await getDb().loansGiven.add(l);
+    await getDb().loansGiven.put(l as never);
     await enqueueSync("loans_given", l.id, "upsert", {
       id: l.id,
       borrower: l.borrower,

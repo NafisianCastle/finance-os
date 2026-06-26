@@ -22,7 +22,7 @@ export async function addTransaction(
   const accountUpdates: { id: string; balance_poisha: number }[] = [];
 
   await db.transaction("rw", db.transactions, db.accounts, async () => {
-    await db.transactions.add(tx);
+    await db.transactions.put(tx as never);
     const account = await db.accounts.get(data.accountId);
     if (!account) return;
 

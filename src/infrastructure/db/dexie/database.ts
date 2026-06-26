@@ -17,19 +17,19 @@ import type {
 import { INVESTMENT_STATUS } from "@/lib/investment-constants";
 
 export class FinanceDatabase extends Dexie {
-  userProfiles!: EntityTable<UserProfile, string>;
-  accounts!: EntityTable<Account, string>;
-  categories!: EntityTable<Category, string>;
-  transactions!: EntityTable<Transaction, string>;
-  budgets!: EntityTable<Budget, string>;
-  debts!: EntityTable<Debt, string>;
-  loansGiven!: EntityTable<LoanGiven, string>;
-  heldLiabilities!: EntityTable<HeldLiability, string>;
-  goals!: EntityTable<Goal, string>;
-  investments!: EntityTable<Investment, string>;
-  investmentEvents!: EntityTable<InvestmentEvent, string>;
-  buyEvaluations!: EntityTable<BuyEvaluation, string>;
-  syncQueue!: EntityTable<SyncQueueItem, number>;
+  userProfiles!: EntityTable<UserProfile, "id">;
+  accounts!: EntityTable<Account, "id">;
+  categories!: EntityTable<Category, "id">;
+  transactions!: EntityTable<Transaction, "id">;
+  budgets!: EntityTable<Budget, "id">;
+  debts!: EntityTable<Debt, "id">;
+  loansGiven!: EntityTable<LoanGiven, "id">;
+  heldLiabilities!: EntityTable<HeldLiability, "id">;
+  goals!: EntityTable<Goal, "id">;
+  investments!: EntityTable<Investment, "id">;
+  investmentEvents!: EntityTable<InvestmentEvent, "id">;
+  buyEvaluations!: EntityTable<BuyEvaluation, "id">;
+  syncQueue!: EntityTable<SyncQueueItem, "id">;
 
   constructor() {
     super("FinanceOS");

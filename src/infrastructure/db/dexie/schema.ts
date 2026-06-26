@@ -122,7 +122,7 @@ export interface BuyEvaluation extends BaseRecord {
 }
 
 export interface SyncQueueItem {
-  id?: number;
+  id?: string;
   table: string;
   recordId: string;
   operation: "upsert" | "delete";

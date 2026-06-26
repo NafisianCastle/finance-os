@@ -83,7 +83,7 @@ export default function SmartBuyPage() {
       createdAt: now,
       updatedAt: now,
     };
-    await getDb().buyEvaluations.add(evalRecord);
+    await getDb().buyEvaluations.put(evalRecord as never);
     await pruneBuyEvaluations(userId);
     await enqueueSync(
       "buy_evaluations",

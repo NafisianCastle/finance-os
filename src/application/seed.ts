@@ -55,9 +55,9 @@ export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
   }));
 
   await db.transaction("rw", [db.userProfiles, db.accounts, db.categories], async () => {
-    await db.userProfiles.put(profile);
-    await db.accounts.bulkPut(accounts);
-    await db.categories.bulkPut(categories);
+    await db.userProfiles.put(profile as never);
+    await db.accounts.bulkPut(accounts as never);
+    await db.categories.bulkPut(categories as never);
   });
 
   return profile;
