@@ -2,6 +2,7 @@
 
 import { BottomNav } from "./bottom-nav";
 import { SyncBadge } from "./sync-badge";
+import { NotificationCenter } from "./notification-center";
 
 export function AppShell({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
@@ -9,7 +10,10 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold tracking-tight">{title ?? "Finance OS"}</h1>
-          <SyncBadge />
+          <div className="flex items-center gap-2">
+            <NotificationCenter />
+            <SyncBadge />
+          </div>
         </div>
       </header>
       <main className="px-4 py-4">{children}</main>

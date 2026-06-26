@@ -111,7 +111,7 @@ export default function BudgetsPage() {
           createdAt: now,
           updatedAt: now,
         };
-        await db.budgets.add(rec);
+        await db.budgets.put(rec as never);
         await enqueueSync("budgets", rec.id, "upsert", {
           id: rec.id,
           ym_char6: ym,
@@ -205,7 +205,7 @@ export default function BudgetsPage() {
       createdAt: now,
       updatedAt: now,
     } as Budget;
-    await db.budgets.add(rec);
+    await db.budgets.put(rec as never);
     await enqueueSync("budgets", rec.id, "upsert", {
       id: rec.id,
       ym_char6: ym,

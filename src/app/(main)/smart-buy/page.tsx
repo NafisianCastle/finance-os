@@ -32,7 +32,7 @@ export default function SmartBuyPage() {
   const [product, setProduct] = useState("");
   const [categoryId, setCategoryId] = useState("gadgets");
   const [price, setPrice] = useState("");
-  const [priority, setPriority] = useState(PRIORITY.USEFUL);
+  const [priority, setPriority] = useState<number>(PRIORITY.USEFUL);
   const [result, setResult] = useState<SmartBuyResult | null>(null);
   const [meta, setMeta] = useState<Record<string, number>>({});
 
