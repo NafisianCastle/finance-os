@@ -1,16 +1,26 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const PUBLIC_PATHS = ["/login", "/signup", "/onboarding", "/auth"]
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // Local-only mode (no Supabase configured): auth gate doesn't apply, app uses /onboarding.
+  if (!supabaseUrl || !supabaseKey) {
+    return supabaseResponse
+  }
+
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {
@@ -40,12 +50,11 @@ export async function updateSession(request: NextRequest) {
 
   if (
     !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
+    !PUBLIC_PATHS.some((path) => request.nextUrl.pathname.startsWith(path))
   ) {
-    // no user, potentially respond by redirecting the user to the login page
+    // no user, redirect to login page
     const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
+    url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 

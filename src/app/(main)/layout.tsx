@@ -1,5 +1,6 @@
 "use client";
 
+import { BackButton } from "@/components/back-button";
 import { SyncOnFocus } from "@/components/sync-on-focus";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
@@ -46,6 +47,7 @@ export default function MainLayout({
   return (
     <>
       <SyncOnFocus />
+      <BackButton />
       {children}
     </>
   );
