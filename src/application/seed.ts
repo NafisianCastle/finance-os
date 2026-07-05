@@ -30,7 +30,7 @@ export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
       userId,
       type: 1,
       name: "Cash",
-      balancePoisha: bdtToPoisha(5000),
+      balancePoisha: 0,
       createdAt: now,
       updatedAt: now,
     },
@@ -39,7 +39,7 @@ export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
       userId,
       type: 2,
       name: "Bank",
-      balancePoisha: bdtToPoisha(15000),
+      balancePoisha: 0,
       createdAt: now,
       updatedAt: now,
     },
@@ -79,13 +79,9 @@ export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
     });
   }
 
-  for (const cat of categories) {
-    await enqueueSync("categories", cat.id, "upsert", {
-      id: cat.id,
-      name: cat.name,
-      icon_key: cat.iconKey,
-    });
-  }
+  // System categories use slug ids ("food", "transport", ...) but the remote
+  // categories table's id column is uuid — not syncable, and unnecessary since
+  // transactions/budgets reference the category by slug string, not FK.
 
   return profile;
 }

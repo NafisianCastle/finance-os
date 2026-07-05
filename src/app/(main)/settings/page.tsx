@@ -10,9 +10,10 @@ import {
   createClient,
   isSupabaseConfigured,
 } from "@/infrastructure/supabase/client";
-import { processSyncQueue, repairAccountSync } from "@/infrastructure/sync/sync-queue";
-import { bdtToPoisha } from "@/lib/money";
+import { enqueueSync, processSyncQueue, repairAccountSync } from "@/infrastructure/sync/sync-queue";
+import { bdtToPoisha, poishaToBdt } from "@/lib/money";
 import { useAppStore } from "@/store/app-store";
+import type { Account } from "@/infrastructure/db/dexie/schema";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,8 @@ export default function SettingsPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
   const [email, setEmail] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [balanceInputs, setBalanceInputs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!userId) return;
@@ -38,6 +41,37 @@ export default function SettingsPage() {
         if (p) setIncome(String(p.monthlyIncomePoisha / 100));
       });
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    getDb()
+      .accounts.where("userId")
+      .equals(userId)
+      .filter((a) => !a.deletedAt)
+      .toArray()
+      .then((accs) => {
+        setAccounts(accs);
+        setBalanceInputs(
+          Object.fromEntries(accs.map((a) => [a.id, String(poishaToBdt(a.balancePoisha))])),
+        );
+      });
+  }, [userId]);
+
+  async function saveAccountBalance(acc: Account) {
+    if (!userId) return;
+    const bdt = parseFloat(balanceInputs[acc.id]);
+    if (Number.isNaN(bdt)) return;
+    const balancePoisha = bdtToPoisha(bdt);
+    const now = new Date().toISOString();
+    await getDb().accounts.update(acc.id, { balancePoisha, updatedAt: now });
+    await enqueueSync("accounts", acc.id, "upsert", {
+      id: acc.id,
+      type_smallint: acc.type,
+      name: acc.name,
+      balance_poisha: balancePoisha,
+    });
+    setAccounts((prev) => prev.map((a) => (a.id === acc.id ? { ...a, balancePoisha } : a)));
+  }
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -108,6 +142,33 @@ export default function SettingsPage() {
             >
               Save income
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4 space-y-3">
+            <p className="text-sm font-medium">Account balances</p>
+            <p className="text-sm text-muted-foreground">
+              Set these to what you actually have — they start at ৳0 and
+              aren&apos;t filled in from your income automatically.
+            </p>
+            {accounts.map((acc) => (
+              <div key={acc.id} className="flex items-end gap-2">
+                <div className="flex-1 space-y-1">
+                  <Label>{acc.name}</Label>
+                  <Input
+                    type="number"
+                    value={balanceInputs[acc.id] ?? ""}
+                    onChange={(e) =>
+                      setBalanceInputs((prev) => ({ ...prev, [acc.id]: e.target.value }))
+                    }
+                  />
+                </div>
+                <Button variant="secondary" onClick={() => saveAccountBalance(acc)}>
+                  Save
+                </Button>
+              </div>
+            ))}
           </CardContent>
         </Card>
 

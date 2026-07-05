@@ -3,6 +3,15 @@ import { MAX_SYNC_BUY_EVALS, SYNC_BATCH_SIZE } from "@/lib/constants";
 import { createClient } from "@/infrastructure/supabase/client";
 import type { BuyEvaluation } from "@/infrastructure/db/dexie/schema";
 
+// Tables with a unique constraint other than the primary key — Supabase's
+// upsert() defaults to conflict-resolving on the primary key only, so any
+// other unique constraint must be named explicitly or upserts 23505 instead
+// of updating the existing row.
+const UNIQUE_CONFLICT_TARGETS: Record<string, string> = {
+  budgets: "user_id,ym_char6,category_id",
+  user_profiles: "user_id",
+};
+
 export async function enqueueSync(
   table: string,
   recordId: string,
@@ -33,13 +42,18 @@ function leanPayload(table: string, payload: Record<string, unknown>): Record<st
 }
 
 /**
- * Re-enqueues full account/profile/category rows and drops any stale queued
- * entries for those tables. Needed for users seeded before seed.ts started
- * pushing full rows (previously only partial account balance diffs were queued,
- * which fail NOT NULL constraints on first remote insert).
+ * Re-enqueues full account/profile rows and drops any stale queued entries for
+ * those tables. Needed for users seeded before seed.ts started pushing full
+ * rows (previously only partial account balance diffs were queued, which fail
+ * NOT NULL constraints on first remote insert). Categories are intentionally
+ * excluded: system category ids are slugs ("food", "transport", ...) but the
+ * remote categories table's id column is uuid, so they aren't syncable, and
+ * transactions/budgets reference the category by slug string, not FK.
  */
 export async function repairAccountSync(userId: string) {
   const db = getDb();
+  // "categories" is included here purely to purge already-queued entries from
+  // a previous buggy repair run; it's never re-enqueued below.
   const staleTables = new Set(["accounts", "user_profiles", "categories"]);
   await db.syncQueue.filter((item) => staleTables.has(item.table)).delete();
 
@@ -64,15 +78,6 @@ export async function repairAccountSync(userId: string) {
       balance_poisha: acc.balancePoisha,
     });
   }
-
-  const categories = await db.categories.where("userId").equals(userId).filter((c) => !c.deletedAt).toArray();
-  for (const cat of categories) {
-    await enqueueSync("categories", cat.id, "upsert", {
-      id: cat.id,
-      name: cat.name,
-      icon_key: cat.iconKey,
-    });
-  }
 }
 
 export async function processSyncQueue(
@@ -89,6 +94,15 @@ export async function processSyncQueue(
 
   for (const item of items) {
     const { table, operation, payload, recordId } = item;
+
+    // System categories use slug ids ("food", "transport", ...) which can
+    // never satisfy the remote categories table's uuid id column. Drop any
+    // queued entries instead of retrying forever.
+    if (table === "categories") {
+      if (item.id) await db.syncQueue.delete(item.id);
+      continue;
+    }
+
     const row = { ...payload, id: recordId, user_id: userId, updated_at: new Date().toISOString() };
 
     if (operation === "delete") {
@@ -108,7 +122,10 @@ export async function processSyncQueue(
         if (item.id) await db.syncQueue.delete(item.id);
       }
     } else {
-      const { error } = await supabase.from(table).upsert(row);
+      const onConflict = UNIQUE_CONFLICT_TARGETS[table];
+      const { error } = onConflict
+        ? await supabase.from(table).upsert(row, { onConflict })
+        : await supabase.from(table).upsert(row);
       if (error) {
         errors++;
         lastError = error.message || error.code || error.details || "unknown error";
