@@ -17,10 +17,19 @@ import { enqueueSync, processSyncQueue, repairAccountSync } from "@/infrastructu
 import { bdtToPoisha, poishaToBdt } from "@/lib/money";
 import { useAppStore } from "@/store/app-store";
 import type { Account } from "@/infrastructure/db/dexie/schema";
-import { Loader2, Moon, Sun } from "lucide-react";
+import { ACCOUNT_TYPES } from "@/lib/constants";
+import { Loader2, Moon, Sun, Plus, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { v4 as uuid } from "uuid";
+
+const ACCOUNT_TYPE_OPTIONS = [
+  { v: ACCOUNT_TYPES.CASH, l: "Cash" },
+  { v: ACCOUNT_TYPES.BANK, l: "Bank" },
+  { v: ACCOUNT_TYPES.WALLET, l: "Mobile wallet" },
+  { v: ACCOUNT_TYPES.CREDIT_CARD, l: "Credit card" },
+];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -40,6 +49,11 @@ export default function SettingsPage() {
   const [savingAccountId, setSavingAccountId] = useState<string | null>(null);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountType, setNewAccountType] = useState<number>(ACCOUNT_TYPES.WALLET);
+  const [newAccountBalance, setNewAccountBalance] = useState("");
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -96,6 +110,57 @@ export default function SettingsPage() {
     setAccounts((prev) => prev?.map((a) => (a.id === acc.id ? { ...a, balancePoisha } : a)) ?? prev);
     setSavingAccountId(null);
     toast(`${acc.name} balance updated.`, "success");
+  }
+
+  async function handleCreateAccount() {
+    if (!userId || !newAccountName.trim()) return;
+    const bdt = parseFloat(newAccountBalance) || 0;
+    if (bdt < 0) {
+      toast("Enter a valid, non-negative amount.", "error");
+      return;
+    }
+    setCreatingAccount(true);
+    const now = new Date().toISOString();
+    const acc: Account = {
+      id: uuid(),
+      userId,
+      type: newAccountType,
+      name: newAccountName.trim(),
+      balancePoisha: bdtToPoisha(bdt),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().accounts.put(acc as never);
+    await enqueueSync("accounts", acc.id, "upsert", {
+      id: acc.id,
+      type_smallint: acc.type,
+      name: acc.name,
+      balance_poisha: acc.balancePoisha,
+    });
+    setAccounts((prev) => [...(prev ?? []), acc]);
+    setBalanceInputs((prev) => ({ ...prev, [acc.id]: String(poishaToBdt(acc.balancePoisha)) }));
+    setNewAccountName("");
+    setNewAccountBalance("");
+    setCreatingAccount(false);
+    toast(`${acc.name} added.`, "success");
+  }
+
+  async function handleDeleteAccount(acc: Account) {
+    if (!userId) return;
+    const ok = await confirm({
+      title: `Remove ${acc.name}?`,
+      description: "Past transactions on this account are kept, but it won't be selectable anymore.",
+      confirmLabel: "Remove",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setDeletingAccountId(acc.id);
+    const now = new Date().toISOString();
+    await getDb().accounts.update(acc.id, { deletedAt: now, updatedAt: now });
+    await enqueueSync("accounts", acc.id, "delete", { id: acc.id });
+    setAccounts((prev) => prev?.filter((a) => a.id !== acc.id) ?? prev);
+    setDeletingAccountId(null);
+    toast(`${acc.name} removed.`, "success");
   }
 
   async function saveProfile() {
@@ -251,9 +316,62 @@ export default function SettingsPage() {
                     {savingAccountId === acc.id && <Loader2 className="h-4 w-4 animate-spin" />}
                     Save
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label={`Remove ${acc.name}`}
+                    onClick={() => handleDeleteAccount(acc)}
+                    disabled={deletingAccountId === acc.id}
+                  >
+                    {deletingAccountId === acc.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    )}
+                  </Button>
                 </div>
               ))
             )}
+
+            <div className="border-t border-border pt-3 space-y-2">
+              <Label>Add account</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. bKash, City Bank"
+                  value={newAccountName}
+                  onChange={(e) => setNewAccountName(e.target.value)}
+                  className="flex-1"
+                />
+                <select
+                  className="flex h-10 rounded-lg border border-input bg-background px-2 text-sm"
+                  value={newAccountType}
+                  onChange={(e) => setNewAccountType(Number(e.target.value))}
+                >
+                  {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                    <option key={t.v} value={t.v}>{t.l}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Starting balance (BDT)"
+                  value={newAccountBalance}
+                  onChange={(e) => setNewAccountBalance(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  variant="secondary"
+                  className="gap-1.5 shrink-0"
+                  onClick={handleCreateAccount}
+                  disabled={creatingAccount || !newAccountName.trim()}
+                >
+                  {creatingAccount ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Add
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

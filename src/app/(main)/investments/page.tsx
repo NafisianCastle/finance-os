@@ -58,6 +58,15 @@ const PIE_COLORS = [
   "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
 ];
 
+const UNIT_TYPES = new Set<number>([INVESTMENT_TYPE.STOCKS, INVESTMENT_TYPE.MUTUAL_FUND]);
+const UNIT_LABEL: Record<number, string> = {
+  [INVESTMENT_TYPE.STOCKS]: "Shares",
+  [INVESTMENT_TYPE.MUTUAL_FUND]: "Units",
+};
+const RATE_TYPES = new Set<number>([INVESTMENT_TYPE.DPS, INVESTMENT_TYPE.FDR]);
+const GOLD_TYPES = new Set<number>([INVESTMENT_TYPE.GOLD]);
+const PURITY_OPTIONS = ["18k", "21k", "22k", "24k"];
+
 const STATUS_LABEL: Record<number, string> = {
   [INVESTMENT_STATUS.ACTIVE]: "Active",
   [INVESTMENT_STATUS.COMPLETED]: "Completed",
@@ -76,12 +85,18 @@ export default function InvestmentsPage() {
   const [investor, setInvestor] = useState("");
   const [invested, setInvested] = useState("");
   const [declaredProfit, setDeclaredProfit] = useState("");
+  const [declaredProfitMode, setDeclaredProfitMode] = useState<"amount" | "percent">("amount");
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState("");
   const [type, setType] = useState<number>(INVESTMENT_TYPE.BUSINESS);
+  const [quantity, setQuantity] = useState("");
+  const [pricePerUnit, setPricePerUnit] = useState("");
+  const [interestRatePct, setInterestRatePct] = useState("");
+  const [purity, setPurity] = useState("22k");
 
   const [eventType, setEventType] = useState<number>(INVESTMENT_EVENT_TYPE.CAPITAL_RETURN);
   const [eventAmount, setEventAmount] = useState("");
+  const [eventAmountMode, setEventAmountMode] = useState<"amount" | "percent">("amount");
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
 
   async function load() {
@@ -93,27 +108,49 @@ export default function InvestmentsPage() {
 
   async function handleCreate() {
     if (!userId || !name) return;
+    const isUnitType = UNIT_TYPES.has(type);
+    const quantityNum = quantity ? parseFloat(quantity) : undefined;
+    const pricePerUnitPoisha = pricePerUnit ? bdtToPoisha(parseFloat(pricePerUnit)) : undefined;
+    const investedPoisha =
+      isUnitType && quantityNum && pricePerUnitPoisha
+        ? Math.round(quantityNum * pricePerUnitPoisha)
+        : bdtToPoisha(parseFloat(invested) || 0);
+    const declaredProfitPoisha = declaredProfit
+      ? declaredProfitMode === "percent"
+        ? Math.round(investedPoisha * (parseFloat(declaredProfit) / 100))
+        : bdtToPoisha(parseFloat(declaredProfit))
+      : undefined;
     await createInvestment(userId, {
       type,
       name,
       investorName: investor || undefined,
-      investedPoisha: bdtToPoisha(parseFloat(invested) || 0),
-      declaredProfitPoisha: declaredProfit ? bdtToPoisha(parseFloat(declaredProfit)) : undefined,
+      investedPoisha,
+      declaredProfitPoisha,
       projectStartDate: startDate,
       projectEndDate: endDate || undefined,
+      quantity: quantityNum,
+      pricePerUnitPoisha: isUnitType ? pricePerUnitPoisha : undefined,
+      interestRatePct: RATE_TYPES.has(type) && interestRatePct ? parseFloat(interestRatePct) : undefined,
+      purity: GOLD_TYPES.has(type) ? purity : undefined,
     });
-    setName(""); setInvestor(""); setInvested(""); setDeclaredProfit(""); setEndDate("");
+    setName(""); setInvestor(""); setInvested(""); setDeclaredProfit(""); setDeclaredProfitMode("amount"); setEndDate("");
+    setQuantity(""); setPricePerUnit(""); setInterestRatePct("");
     load();
   }
 
-  async function handleAddEvent(investmentId: string) {
+  async function handleAddEvent(investmentId: string, investedPoisha: number) {
     if (!userId || !eventAmount) return;
+    const amountPoisha =
+      eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
+        ? Math.round(investedPoisha * (parseFloat(eventAmount) / 100))
+        : bdtToPoisha(parseFloat(eventAmount) || 0);
     await addInvestmentEvent(userId, investmentId, {
       type: eventType,
-      amountPoisha: bdtToPoisha(parseFloat(eventAmount) || 0),
+      amountPoisha,
       eventDate,
     });
     setEventAmount("");
+    setEventAmountMode("amount");
     load();
   }
 
@@ -254,7 +291,9 @@ export default function InvestmentsPage() {
                             <p className="text-xs text-muted-foreground">{TYPE_LABELS[inv.type]}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-sm font-semibold text-primary">+{m.roiPct.toFixed(1)}%</p>
+                            <p className={`text-sm font-semibold ${m.roiPct < 0 ? "text-destructive" : "text-primary"}`}>
+                              {m.roiPct >= 0 ? "+" : ""}{m.roiPct.toFixed(1)}%
+                            </p>
                             <p className="text-xs text-muted-foreground">{formatMoney(m.totalReturnPoisha)}</p>
                           </div>
                         </div>
@@ -334,14 +373,89 @@ export default function InvestmentsPage() {
                 {TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
               </select>
             </div>
+            {UNIT_TYPES.has(type) && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>{UNIT_LABEL[type]}</Label>
+                  <Input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 100" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Price per unit (BDT)</Label>
+                  <Input type="number" value={pricePerUnit} onChange={(e) => setPricePerUnit(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {GOLD_TYPES.has(type) && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>Weight (grams)</Label>
+                  <Input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 10" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Purity</Label>
+                  <select
+                    className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                    value={purity}
+                    onChange={(e) => setPurity(e.target.value)}
+                  >
+                    {PURITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {RATE_TYPES.has(type) && (
+              <div className="space-y-2">
+                <Label>Interest / profit rate (% per year)</Label>
+                <Input type="number" value={interestRatePct} onChange={(e) => setInterestRatePct(e.target.value)} placeholder="e.g. 8.5" />
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <Label>Capital invested (BDT)</Label>
-                <Input type="number" value={invested} onChange={(e) => setInvested(e.target.value)} />
+                {UNIT_TYPES.has(type) ? (
+                  <Input
+                    type="number"
+                    value={
+                      quantity && pricePerUnit
+                        ? (parseFloat(quantity) * parseFloat(pricePerUnit)).toFixed(2)
+                        : ""
+                    }
+                    disabled
+                    placeholder="Auto from qty × price"
+                  />
+                ) : (
+                  <Input type="number" value={invested} onChange={(e) => setInvested(e.target.value)} />
+                )}
               </div>
               <div className="space-y-2">
-                <Label>Declared profit (BDT)</Label>
-                <Input type="number" value={declaredProfit} onChange={(e) => setDeclaredProfit(e.target.value)} placeholder="Optional" />
+                <div className="flex items-center justify-between">
+                  <Label>Declared profit</Label>
+                  <div className="flex rounded-full bg-muted p-0.5 text-xs">
+                    {(["amount", "percent"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setDeclaredProfitMode(mode)}
+                        className={`px-2 py-0.5 rounded-full font-medium transition-colors ${
+                          declaredProfitMode === mode
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {mode === "amount" ? "Tk" : "%"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Input
+                  type="number"
+                  value={declaredProfit}
+                  onChange={(e) => setDeclaredProfit(e.target.value)}
+                  placeholder={declaredProfitMode === "percent" ? "e.g. 12 (% of invested)" : "Optional"}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -374,6 +488,13 @@ export default function InvestmentsPage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {inv.projectStartDate}{inv.projectEndDate ? ` → ${inv.projectEndDate}` : ""}
                     </p>
+                    {(inv.quantity || inv.interestRatePct || inv.purity) && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {inv.quantity && `${inv.quantity} ${UNIT_LABEL[inv.type] ?? "g"}`}
+                        {inv.purity && ` · ${inv.purity}`}
+                        {inv.interestRatePct && ` · ${inv.interestRatePct}%/yr`}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <Badge variant={m.isLoss ? "destructive" : "secondary"}>
@@ -443,11 +564,34 @@ export default function InvestmentsPage() {
                         ))}
                     </ul>
                   )}
-                  <p className="text-sm font-medium">Record cashflow</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">Record cashflow</p>
+                    {eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && (
+                      <div className="flex rounded-full bg-muted p-0.5 text-xs">
+                        {(["amount", "percent"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setEventAmountMode(mode)}
+                            className={`px-2 py-0.5 rounded-full font-medium transition-colors ${
+                              eventAmountMode === mode
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            {mode === "amount" ? "Tk" : "%"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <select
                     className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
                     value={eventType}
-                    onChange={(e) => setEventType(Number(e.target.value))}
+                    onChange={(e) => {
+                      setEventType(Number(e.target.value));
+                      setEventAmountMode("amount");
+                    }}
                   >
                     {Object.entries(INVESTMENT_EVENT_LABELS).map(([k, label]) => (
                       <option key={k} value={k}>{label}</option>
@@ -456,13 +600,17 @@ export default function InvestmentsPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <Input
                       type="number"
-                      placeholder="Amount BDT"
+                      placeholder={
+                        eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
+                          ? "e.g. 12 (% of invested)"
+                          : "Amount BDT"
+                      }
                       value={eventAmount}
                       onChange={(e) => setEventAmount(e.target.value)}
                     />
                     <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
                   </div>
-                  <Button size="sm" className="w-full" onClick={() => handleAddEvent(inv.id)}>
+                  <Button size="sm" className="w-full" onClick={() => handleAddEvent(inv.id, m.investedPoisha)}>
                     Add {INVESTMENT_EVENT_LABELS[eventType]}
                   </Button>
                 </div>

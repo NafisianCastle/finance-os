@@ -97,6 +97,14 @@ export interface Investment extends BaseRecord {
   projectEndDate?: string;
   /** Profit declared upfront by investor (BDT poisha) */
   declaredProfitPoisha?: number;
+  /** Shares/units/grams — Stocks, Mutual Fund, Gold */
+  quantity?: number;
+  /** Price per share/unit at purchase (poisha) — Stocks, Mutual Fund */
+  pricePerUnitPoisha?: number;
+  /** Annual interest/profit rate — DPS, FDR */
+  interestRatePct?: number;
+  /** Gold purity, e.g. "22k" */
+  purity?: string;
   status: number;
   note?: string;
 }

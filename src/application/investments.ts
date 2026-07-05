@@ -40,6 +40,10 @@ export async function createInvestment(
     declaredProfitPoisha?: number;
     projectStartDate: string;
     projectEndDate?: string;
+    quantity?: number;
+    pricePerUnitPoisha?: number;
+    interestRatePct?: number;
+    purity?: string;
     note?: string;
   }
 ) {
@@ -55,6 +59,10 @@ export async function createInvestment(
     declaredProfitPoisha: data.declaredProfitPoisha ?? 0,
     projectStartDate: data.projectStartDate,
     projectEndDate: data.projectEndDate,
+    quantity: data.quantity,
+    pricePerUnitPoisha: data.pricePerUnitPoisha,
+    interestRatePct: data.interestRatePct,
+    purity: data.purity,
     status: INVESTMENT_STATUS.ACTIVE,
     note: data.note,
     createdAt: now,
@@ -131,6 +139,10 @@ function leanInvestment(inv: Investment) {
     declared_profit_poisha: inv.declaredProfitPoisha ?? 0,
     project_start_date: inv.projectStartDate,
     project_end_date: inv.projectEndDate ?? null,
+    quantity: inv.quantity ?? null,
+    price_per_unit_poisha: inv.pricePerUnitPoisha ?? null,
+    interest_rate_pct: inv.interestRatePct ?? null,
+    purity: inv.purity?.slice(0, 10) ?? null,
     status_smallint: inv.status,
     note: inv.note?.slice(0, 200),
   };
