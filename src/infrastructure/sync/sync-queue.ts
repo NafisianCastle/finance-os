@@ -32,7 +32,52 @@ function leanPayload(table: string, payload: Record<string, unknown>): Record<st
   return p;
 }
 
-export async function processSyncQueue(userId: string): Promise<{ pushed: number; errors: number }> {
+/**
+ * Re-enqueues full account/profile/category rows and drops any stale queued
+ * entries for those tables. Needed for users seeded before seed.ts started
+ * pushing full rows (previously only partial account balance diffs were queued,
+ * which fail NOT NULL constraints on first remote insert).
+ */
+export async function repairAccountSync(userId: string) {
+  const db = getDb();
+  const staleTables = new Set(["accounts", "user_profiles", "categories"]);
+  await db.syncQueue.filter((item) => staleTables.has(item.table)).delete();
+
+  const profile = await db.userProfiles.where("userId").equals(userId).first();
+  if (profile) {
+    await enqueueSync("user_profiles", profile.id, "upsert", {
+      id: profile.id,
+      monthly_income_poisha: profile.monthlyIncomePoisha,
+      currency_code: profile.currencyCode,
+      locale: profile.locale,
+      emergency_months: profile.emergencyMonths,
+      onboarding_complete: profile.onboardingComplete,
+    });
+  }
+
+  const accounts = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
+  for (const acc of accounts) {
+    await enqueueSync("accounts", acc.id, "upsert", {
+      id: acc.id,
+      type_smallint: acc.type,
+      name: acc.name,
+      balance_poisha: acc.balancePoisha,
+    });
+  }
+
+  const categories = await db.categories.where("userId").equals(userId).filter((c) => !c.deletedAt).toArray();
+  for (const cat of categories) {
+    await enqueueSync("categories", cat.id, "upsert", {
+      id: cat.id,
+      name: cat.name,
+      icon_key: cat.iconKey,
+    });
+  }
+}
+
+export async function processSyncQueue(
+  userId: string
+): Promise<{ pushed: number; errors: number; lastError?: string }> {
   const supabase = createClient();
   if (!supabase) return { pushed: 0, errors: 0 };
 
@@ -40,6 +85,7 @@ export async function processSyncQueue(userId: string): Promise<{ pushed: number
   const items = await db.syncQueue.orderBy("createdAt").limit(SYNC_BATCH_SIZE).toArray();
   let pushed = 0;
   let errors = 0;
+  let lastError: string | undefined;
 
   for (const item of items) {
     const { table, operation, payload, recordId } = item;
@@ -51,22 +97,32 @@ export async function processSyncQueue(userId: string): Promise<{ pushed: number
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", recordId)
         .eq("user_id", userId);
-      if (error) errors++;
-      else {
+      if (error) {
+        errors++;
+        lastError = error.message || error.code || error.details || "unknown error";
+        console.error(
+          `Sync delete failed for ${table}/${recordId}: code=${error.code} message=${error.message} details=${error.details} hint=${error.hint}`,
+        );
+      } else {
         pushed++;
         if (item.id) await db.syncQueue.delete(item.id);
       }
     } else {
       const { error } = await supabase.from(table).upsert(row);
-      if (error) errors++;
-      else {
+      if (error) {
+        errors++;
+        lastError = error.message || error.code || error.details || "unknown error";
+        console.error(
+          `Sync upsert failed for ${table}/${recordId}: code=${error.code} message=${error.message} details=${error.details} hint=${error.hint}`,
+        );
+      } else {
         pushed++;
         if (item.id) await db.syncQueue.delete(item.id);
       }
     }
   }
 
-  return { pushed, errors };
+  return { pushed, errors, lastError };
 }
 
 export async function pullRemoteChanges(

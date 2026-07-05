@@ -19,7 +19,7 @@ export async function addTransaction(
     syncStatus: "pending",
   };
 
-  const accountUpdates: { id: string; balance_poisha: number }[] = [];
+  const accountUpdates: { id: string; type_smallint: number; name: string; balance_poisha: number }[] = [];
 
   await db.transaction("rw", db.transactions, db.accounts, async () => {
     await db.transactions.put(tx as never);
@@ -29,20 +29,20 @@ export async function addTransaction(
     if (data.type === TX_TYPES.INCOME) {
       const bal = account.balancePoisha + data.amountPoisha;
       await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
-      accountUpdates.push({ id: account.id, balance_poisha: bal });
+      accountUpdates.push({ id: account.id, type_smallint: account.type, name: account.name, balance_poisha: bal });
     } else if (data.type === TX_TYPES.EXPENSE) {
       const bal = account.balancePoisha - data.amountPoisha;
       await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
-      accountUpdates.push({ id: account.id, balance_poisha: bal });
+      accountUpdates.push({ id: account.id, type_smallint: account.type, name: account.name, balance_poisha: bal });
     } else if (data.type === TX_TYPES.TRANSFER && data.toAccountId) {
       const fromBal = account.balancePoisha - data.amountPoisha;
       await db.accounts.update(account.id, { balancePoisha: fromBal, updatedAt: now });
-      accountUpdates.push({ id: account.id, balance_poisha: fromBal });
+      accountUpdates.push({ id: account.id, type_smallint: account.type, name: account.name, balance_poisha: fromBal });
       const to = await db.accounts.get(data.toAccountId);
       if (to) {
         const toBal = to.balancePoisha + data.amountPoisha;
         await db.accounts.update(to.id, { balancePoisha: toBal, updatedAt: now });
-        accountUpdates.push({ id: to.id, balance_poisha: toBal });
+        accountUpdates.push({ id: to.id, type_smallint: to.type, name: to.name, balance_poisha: toBal });
       }
     }
   });

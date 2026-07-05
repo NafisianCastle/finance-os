@@ -70,9 +70,13 @@ export function runSmartBuyRules(ctx: RuleContext, input: SmartBuyInput): RuleOu
     });
   }
 
-  const postLiquid = ctx.liquidSavingsPoisha - input.pricePoisha;
+  const preLiquid = ctx.liquidSavingsPoisha;
+  const postLiquid = preLiquid - input.pricePoisha;
   const oneMonthExpenses = Math.max(ctx.monthlyExpensesPoisha, income * 0.5);
-  if (postLiquid < oneMonthExpenses) {
+  const priceRatio = input.pricePoisha / income;
+  // Only blame this purchase for the floor breach if it's the one causing it
+  // (was above the floor before) or it's a substantial purchase on its own.
+  if (postLiquid < oneMonthExpenses && (preLiquid >= oneMonthExpenses || priceRatio > 0.2)) {
     outcomes.push({
       ruleId: "LIQUID_FLOOR",
       penalty: 85,
@@ -81,7 +85,7 @@ export function runSmartBuyRules(ctx: RuleContext, input: SmartBuyInput): RuleOu
     });
   }
 
-  const dti = ctx.totalDebtPoisha / income;
+  const dti = ctx.monthlyDebtServicePoisha / income;
   if (dti > 0.4 && input.pricePoisha > income * 0.15) {
     outcomes.push({
       ruleId: "DTI_STRESS",
@@ -103,9 +107,9 @@ export function runSmartBuyRules(ctx: RuleContext, input: SmartBuyInput): RuleOu
     }
   }
 
-  if (ctx.emergencyFundTargetPoisha > 0) {
+  if (ctx.emergencyFundTargetPoisha > ctx.emergencyFundCurrentPoisha) {
     const impact =
-      (input.pricePoisha / Math.max(ctx.emergencyFundTargetPoisha - ctx.emergencyFundCurrentPoisha, 1)) * 100;
+      (input.pricePoisha / (ctx.emergencyFundTargetPoisha - ctx.emergencyFundCurrentPoisha)) * 100;
     if (impact > 25) {
       outcomes.push({
         ruleId: "EMERGENCY",
@@ -150,8 +154,14 @@ export function aggregateSmartBuy(
 ): import("./types").SmartBuyResult {
   const hardUnsafe = outcomes.some((o) => o.hardUnsafe);
   const maxPenalty = Math.max(...outcomes.map((o) => o.penalty), 0);
+  const restPenalty = outcomes
+    .map((o) => o.penalty)
+    .sort((a, b) => b - a)
+    .slice(1)
+    .reduce((sum, p) => sum + p * 0.3, 0);
+  const totalPenalty = Math.min(100, maxPenalty + restPenalty);
   const impulseBoost = input.priority === PRIORITY.IMPULSE ? 10 : 0;
-  const score = Math.max(0, Math.min(100, 100 - maxPenalty - impulseBoost));
+  const score = Math.max(0, Math.min(100, 100 - totalPenalty - impulseBoost));
   const income = Math.max(ctx.monthlyIncomePoisha, 1);
   const surplus = Math.max(income - ctx.monthlyExpensesPoisha - ctx.monthlyDebtServicePoisha, 1);
   const saveMonths = Math.ceil(input.pricePoisha / surplus);
@@ -162,7 +172,7 @@ export function aggregateSmartBuy(
       ? getGadgetSafeRange(ctx.monthlyIncomePoisha)
       : {
           min: Math.round(income * 0.05),
-          max: Math.round(income * (input.categoryId === "gadgets" ? 0.25 : 0.15)),
+          max: Math.round(income * 0.15),
         };
 
   const reasonCodes = [...new Set(outcomes.flatMap((o) => o.reasonCodes))];

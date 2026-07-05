@@ -10,7 +10,7 @@ import {
   createClient,
   isSupabaseConfigured,
 } from "@/infrastructure/supabase/client";
-import { processSyncQueue } from "@/infrastructure/sync/sync-queue";
+import { processSyncQueue, repairAccountSync } from "@/infrastructure/sync/sync-queue";
 import { bdtToPoisha } from "@/lib/money";
 import { useAppStore } from "@/store/app-store";
 import { Moon, Sun } from "lucide-react";
@@ -26,6 +26,7 @@ export default function SettingsPage() {
   const [income, setIncome] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
+  const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -36,6 +37,15 @@ export default function SettingsPage() {
       .then((p) => {
         if (p) setIncome(String(p.monthlyIncomePoisha / 100));
       });
+  }, [userId]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const supabase = createClient();
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+    });
   }, [userId]);
 
   async function saveProfile() {
@@ -55,8 +65,11 @@ export default function SettingsPage() {
   async function handleSync() {
     if (!userId) return;
     setSyncing(true);
-    const { pushed, errors } = await processSyncQueue(userId);
-    setSyncMsg(`Synced ${pushed} items${errors ? `, ${errors} errors` : ""}`);
+    await repairAccountSync(userId);
+    const { pushed, errors, lastError } = await processSyncQueue(userId);
+    setSyncMsg(
+      `Synced ${pushed} items${errors ? `, ${errors} errors${lastError ? `: ${lastError}` : ""}` : ""}`,
+    );
     setSyncing(false);
   }
 
@@ -125,6 +138,34 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {isSupabaseConfigured() && (
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <p className="text-sm font-medium">Manage account</p>
+              <p className="text-sm text-muted-foreground">
+                {email ?? "Not signed in"}
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={async () => {
+                  if (!email) return;
+                  const supabase = createClient();
+                  if (!supabase) return;
+                  const { error } = await supabase.auth.resetPasswordForEmail(email);
+                  alert(
+                    error
+                      ? `Failed to send reset email: ${error.message}`
+                      : "Password reset email sent.",
+                  );
+                }}
+              >
+                Change password
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardContent className="pt-4 flex items-center justify-between">
             <span className="font-medium">Theme</span>
@@ -161,7 +202,7 @@ export default function SettingsPage() {
         </Button>
 
         <Button variant="destructive" className="w-full" onClick={handleLogout}>
-          Reset local session
+          Log out
         </Button>
       </div>
     </AppShell>

@@ -3,6 +3,7 @@ import { getDb } from "@/infrastructure/db/dexie/database";
 import { SYSTEM_CATEGORIES } from "@/lib/constants";
 import { bdtToPoisha } from "@/lib/money";
 import type { UserProfile, Account, Category } from "@/infrastructure/db/dexie/schema";
+import { enqueueSync } from "@/infrastructure/sync/sync-queue";
 
 export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
   const db = getDb();
@@ -59,6 +60,32 @@ export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
     await db.accounts.bulkPut(accounts as never);
     await db.categories.bulkPut(categories as never);
   });
+
+  await enqueueSync("user_profiles", profile.id, "upsert", {
+    id: profile.id,
+    monthly_income_poisha: profile.monthlyIncomePoisha,
+    currency_code: profile.currencyCode,
+    locale: profile.locale,
+    emergency_months: profile.emergencyMonths,
+    onboarding_complete: profile.onboardingComplete,
+  });
+
+  for (const acc of accounts) {
+    await enqueueSync("accounts", acc.id, "upsert", {
+      id: acc.id,
+      type_smallint: acc.type,
+      name: acc.name,
+      balance_poisha: acc.balancePoisha,
+    });
+  }
+
+  for (const cat of categories) {
+    await enqueueSync("categories", cat.id, "upsert", {
+      id: cat.id,
+      name: cat.name,
+      icon_key: cat.iconKey,
+    });
+  }
 
   return profile;
 }
