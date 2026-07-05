@@ -31,11 +31,11 @@ const CATEGORY_NAME: Record<string, string> = Object.fromEntries(
 );
 
 const CATEGORY_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
+  "oklch(var(--chart-1))",
+  "oklch(var(--chart-2))",
+  "oklch(var(--chart-3))",
+  "oklch(var(--chart-4))",
+  "oklch(var(--chart-5))",
 ];
 
 const MATURITY_LABELS: Record<string, string> = {
@@ -50,7 +50,7 @@ const MATURITY_LABELS: Record<string, string> = {
 function maturityColor(score: number) {
   if (score >= 70) return "hsl(var(--success))";
   if (score >= 40) return "hsl(var(--warning))";
-  return "var(--destructive)";
+  return "oklch(var(--destructive))";
 }
 
 export default function DashboardPage() {
@@ -247,7 +247,7 @@ export default function DashboardPage() {
                         key={entry.name}
                         fill={
                           entry.name === "Other"
-                            ? "var(--muted-foreground)"
+                            ? "oklch(var(--muted-foreground))"
                             : CATEGORY_COLORS[i % CATEGORY_COLORS.length]
                         }
                       />
@@ -256,7 +256,7 @@ export default function DashboardPage() {
                       dataKey="value"
                       position="right"
                       formatter={(v: number) => formatMoney(v)}
-                      style={{ fontSize: 11, fill: "var(--foreground)" }}
+                      style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
                     />
                   </Bar>
                 </BarChart>
@@ -294,7 +294,7 @@ export default function DashboardPage() {
                     dataKey="value"
                     position="right"
                     formatter={(v: number) => `${v}`}
-                    style={{ fontSize: 11, fill: "var(--foreground)" }}
+                    style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
                   />
                 </Bar>
               </BarChart>
