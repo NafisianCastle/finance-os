@@ -1,4 +1,4 @@
-import { BUY_RECO, BUY_TIER } from "@/lib/constants";
+import { BUY_RECO, BUY_TIER, PRIORITY } from "@/lib/constants";
 
 export const INCOME_BANDS = {
   LOW: 25_000 * 100,
@@ -10,6 +10,19 @@ export const CATEGORY_CAPS: Record<string, { need: number; luxury: number }> = {
   shopping: { need: 0.2, luxury: 0.1 },
   entertainment: { need: 0.1, luxury: 0.05 },
   default: { need: 0.3, luxury: 0.15 },
+};
+
+// Scales penalties from rules that don't otherwise account for purchase
+// priority (income-ratio, budget overflow, liquid floor, DTI, goal delay,
+// emergency impact, spend trend). A NEED purchase is discounted since it's
+// often unavoidable; an IMPULSE purchase is scrutinized harder. HARD_UNSAFE,
+// GADGET_CAP/CATEGORY_CAP, and IMPULSE itself are exempt — they already
+// factor priority directly (via the need/luxury cap split, or by definition).
+export const PRIORITY_PENALTY_MULTIPLIER: Record<number, number> = {
+  [PRIORITY.NEED]: 0.5,
+  [PRIORITY.USEFUL]: 0.85,
+  [PRIORITY.LUXURY]: 1,
+  [PRIORITY.IMPULSE]: 1.15,
 };
 
 export const GADGET_SAFE_RANGE = {

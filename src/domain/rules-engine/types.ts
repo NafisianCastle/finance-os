@@ -9,6 +9,7 @@ export enum ReasonCode {
   CATEGORY_SPEND_UP = 8,
   EMERGENCY_IMPACT = 9,
   SAFE_WITHIN_BAND = 10,
+  CATEGORY_CAP_EXCEEDED = 11,
 }
 
 export interface RuleContext {

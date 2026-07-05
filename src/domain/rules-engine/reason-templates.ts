@@ -8,6 +8,8 @@ const TEMPLATES: Record<ReasonCode, (v: TemplateVars) => string> = {
     `Costs ${v.ratioPct ?? "?"}% of monthly income`,
   [ReasonCode.GADGET_CAP_EXCEEDED]: (v) =>
     `Exceeds gadget affordability threshold (max ${v.capPct ?? "?"}% of income)`,
+  [ReasonCode.CATEGORY_CAP_EXCEEDED]: (v) =>
+    `Exceeds category affordability threshold (max ${v.capPct ?? "?"}% of income)`,
   [ReasonCode.BUDGET_OVERFLOW]: () =>
     `Exceeds remaining category budget for this month`,
   [ReasonCode.LIQUID_FLOOR_BREACH]: () =>

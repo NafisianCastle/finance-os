@@ -23,18 +23,36 @@ import {
   toLeanBuyEval,
 } from "@/infrastructure/sync/sync-queue";
 import { PRIORITY } from "@/lib/constants";
-import { bdtToPoisha } from "@/lib/money";
+import { bdtToPoisha, formatMoney } from "@/lib/money";
 import { useAppStore } from "@/store/app-store";
+import { useToast } from "@/components/ui/toast";
+import type { BuyEvaluation } from "@/infrastructure/db/dexie/schema";
 import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
 export default function SmartBuyPage() {
   const userId = useAppStore((s) => s.userId);
+  const { toast } = useToast();
   const [product, setProduct] = useState("");
   const [categoryId, setCategoryId] = useState("gadgets");
   const [price, setPrice] = useState("");
   const [priority, setPriority] = useState<number>(PRIORITY.USEFUL);
   const [result, setResult] = useState<SmartBuyResult | null>(null);
   const [meta, setMeta] = useState<Record<string, number>>({});
+  const [history, setHistory] = useState<BuyEvaluation[]>([]);
+
+  async function loadHistory() {
+    if (!userId) return;
+    const list = await getDb()
+      .buyEvaluations.where("userId")
+      .equals(userId)
+      .filter((e) => !e.deletedAt)
+      .toArray();
+    setHistory(list.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  }
+
+  useEffect(() => {
+    loadHistory();
+  }, [userId]);
 
   // Auto-evaluate when price, category, or priority changes
   useEffect(() => {
@@ -91,6 +109,8 @@ export default function SmartBuyPage() {
       "upsert",
       toLeanBuyEval(evalRecord),
     );
+    await loadHistory();
+    toast(`Saved "${evalRecord.productName || "evaluation"}".`, "success");
   }
 
   return (
@@ -207,6 +227,27 @@ export default function SmartBuyPage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {history.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Past evaluations</p>
+            {history.map((h) => (
+              <Card key={h.id}>
+                <CardContent className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium">{h.productName || "Untitled"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatMoney(h.pricePoisha)} · {new Date(h.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge variant={h.tier >= 5 ? "destructive" : "secondary"}>
+                    {tierLabel(h.tier)}
+                  </Badge>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
       </div>
     </AppShell>
