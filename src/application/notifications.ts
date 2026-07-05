@@ -24,6 +24,7 @@ export async function loadNotifications(userId: string): Promise<AppNotification
         title: `Overdue debt — ${d.lender}`,
         body: `Due ${d.dueDate} · still unpaid`,
         priority: "high",
+        href: "/debt",
       });
     }
   }
@@ -42,6 +43,7 @@ export async function loadNotifications(userId: string): Promise<AppNotification
         title: `Loan overdue — ${l.borrower}`,
         body: `Due ${l.dueDate} · not yet recovered`,
         priority: "high",
+        href: "/loans-given",
       });
     }
   }
@@ -75,6 +77,7 @@ export async function loadNotifications(userId: string): Promise<AppNotification
         title: `Over budget — ${b.categoryId}`,
         body: `Spent more than allocated this month`,
         priority: "medium",
+        href: "/budgets",
       });
     }
   }
@@ -91,6 +94,7 @@ export async function loadNotifications(userId: string): Promise<AppNotification
       title: "Budget health is low",
       body: `Overall budget adherence at ${health}% this month`,
       priority: "medium",
+      href: "/budgets",
     });
   }
 

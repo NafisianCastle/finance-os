@@ -6,6 +6,7 @@ export interface AppNotification {
   title: string;
   body: string;
   priority: "high" | "medium" | "low";
+  href?: string;
 }
 
 interface NotificationState {

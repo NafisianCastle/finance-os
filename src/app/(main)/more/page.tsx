@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Brain,
   CreditCard,
   HandCoins,
   Landmark,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 
 const links = [
+  { href: "/smart-buy", label: "Smart Buy", icon: Brain },
   { href: "/debt", label: "Debt manager", icon: CreditCard },
   { href: "/loans-given", label: "Loans given", icon: HandCoins },
   { href: "/liabilities", label: "Held money", icon: Wallet },
