@@ -7,6 +7,7 @@ import { HealthCard } from "@/components/health-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAppStore } from "@/store/app-store";
 import { useNotificationStore } from "@/store/notification-store";
 import { getDashboardMetrics } from "@/application/analytics";
@@ -30,7 +31,19 @@ export default function DashboardPage() {
   if (!metrics) {
     return (
       <AppShell title="Dashboard">
-        <p className="text-muted-foreground">Loading…</p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+          <Skeleton className="h-40 w-full" />
+        </div>
       </AppShell>
     );
   }

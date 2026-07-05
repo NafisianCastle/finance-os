@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getDb, resetLocalDatabase } from "@/infrastructure/db/dexie/database";
 import {
   createClient,
@@ -14,7 +17,7 @@ import { enqueueSync, processSyncQueue, repairAccountSync } from "@/infrastructu
 import { bdtToPoisha, poishaToBdt } from "@/lib/money";
 import { useAppStore } from "@/store/app-store";
 import type { Account } from "@/infrastructure/db/dexie/schema";
-import { Moon, Sun } from "lucide-react";
+import { Loader2, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -24,12 +27,19 @@ export default function SettingsPage() {
   const userId = useAppStore((s) => s.userId);
   const setUserId = useAppStore((s) => s.setUserId);
   const { theme, setTheme } = useTheme();
+  const { toast } = useToast();
+  const confirm = useConfirm();
+
   const [income, setIncome] = useState("");
+  const [savingIncome, setSavingIncome] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
   const [email, setEmail] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [balanceInputs, setBalanceInputs] = useState<Record<string, string>>({});
+  const [savingAccountId, setSavingAccountId] = useState<string | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -57,22 +67,6 @@ export default function SettingsPage() {
       });
   }, [userId]);
 
-  async function saveAccountBalance(acc: Account) {
-    if (!userId) return;
-    const bdt = parseFloat(balanceInputs[acc.id]);
-    if (Number.isNaN(bdt)) return;
-    const balancePoisha = bdtToPoisha(bdt);
-    const now = new Date().toISOString();
-    await getDb().accounts.update(acc.id, { balancePoisha, updatedAt: now });
-    await enqueueSync("accounts", acc.id, "upsert", {
-      id: acc.id,
-      type_smallint: acc.type,
-      name: acc.name,
-      balance_poisha: balancePoisha,
-    });
-    setAccounts((prev) => prev.map((a) => (a.id === acc.id ? { ...a, balancePoisha } : a)));
-  }
-
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const supabase = createClient();
@@ -82,18 +76,51 @@ export default function SettingsPage() {
     });
   }, [userId]);
 
+  async function saveAccountBalance(acc: Account) {
+    if (!userId) return;
+    const bdt = parseFloat(balanceInputs[acc.id]);
+    if (Number.isNaN(bdt) || bdt < 0) {
+      toast("Enter a valid, non-negative amount.", "error");
+      return;
+    }
+    setSavingAccountId(acc.id);
+    const balancePoisha = bdtToPoisha(bdt);
+    const now = new Date().toISOString();
+    await getDb().accounts.update(acc.id, { balancePoisha, updatedAt: now });
+    await enqueueSync("accounts", acc.id, "upsert", {
+      id: acc.id,
+      type_smallint: acc.type,
+      name: acc.name,
+      balance_poisha: balancePoisha,
+    });
+    setAccounts((prev) => prev?.map((a) => (a.id === acc.id ? { ...a, balancePoisha } : a)) ?? prev);
+    setSavingAccountId(null);
+    toast(`${acc.name} balance updated.`, "success");
+  }
+
   async function saveProfile() {
     if (!userId) return;
+    const bdt = parseFloat(income);
+    if (Number.isNaN(bdt) || bdt < 0) {
+      toast("Enter a valid, non-negative income.", "error");
+      return;
+    }
+    setSavingIncome(true);
     const profile = await getDb()
       .userProfiles.where("userId")
       .equals(userId)
       .first();
-    if (!profile) return;
+    if (!profile) {
+      setSavingIncome(false);
+      return;
+    }
     const now = new Date().toISOString();
     await getDb().userProfiles.update(profile.id, {
-      monthlyIncomePoisha: bdtToPoisha(parseFloat(income) || 0),
+      monthlyIncomePoisha: bdtToPoisha(bdt),
       updatedAt: now,
     });
+    setSavingIncome(false);
+    toast("Monthly income saved.", "success");
   }
 
   async function handleSync() {
@@ -101,13 +128,53 @@ export default function SettingsPage() {
     setSyncing(true);
     await repairAccountSync(userId);
     const { pushed, errors, lastError } = await processSyncQueue(userId);
-    setSyncMsg(
-      `Synced ${pushed} items${errors ? `, ${errors} errors${lastError ? `: ${lastError}` : ""}` : ""}`,
-    );
+    const msg = `Synced ${pushed} items${errors ? `, ${errors} errors${lastError ? `: ${lastError}` : ""}` : ""}`;
+    setSyncMsg(msg);
     setSyncing(false);
+    toast(msg, errors ? "error" : "success");
+  }
+
+  async function handleChangePassword() {
+    if (!email) return;
+    setResettingPassword(true);
+    const supabase = createClient();
+    if (!supabase) {
+      setResettingPassword(false);
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    setResettingPassword(false);
+    toast(
+      error ? `Failed to send reset email: ${error.message}` : "Password reset email sent.",
+      error ? "error" : "success",
+    );
+  }
+
+  async function handleRepairDatabase() {
+    const ok = await confirm({
+      title: "Fix database errors?",
+      description: "This clears all local Finance OS data and returns you to onboarding. This can't be undone.",
+      confirmLabel: "Clear data",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setRepairing(true);
+    await resetLocalDatabase();
+    setUserId(null);
+    router.push("/onboarding");
   }
 
   async function handleLogout() {
+    const ok = await confirm({
+      title: "Log out?",
+      description: isSupabaseConfigured()
+        ? "You'll need to sign in again to sync your data."
+        : "This clears your local session.",
+      confirmLabel: "Log out",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
     if (isSupabaseConfigured()) {
       const supabase = createClient();
       if (supabase) {
@@ -128,9 +195,11 @@ export default function SettingsPage() {
         <Card>
           <CardContent className="pt-4 space-y-3">
             <div className="space-y-2">
-              <Label>Monthly income (BDT)</Label>
+              <Label htmlFor="income">Monthly income (BDT)</Label>
               <Input
+                id="income"
                 type="number"
+                min={0}
                 value={income}
                 onChange={(e) => setIncome(e.target.value)}
               />
@@ -139,7 +208,9 @@ export default function SettingsPage() {
               onClick={saveProfile}
               variant="secondary"
               className="w-full"
+              disabled={savingIncome}
             >
+              {savingIncome && <Loader2 className="h-4 w-4 animate-spin" />}
               Save income
             </Button>
           </CardContent>
@@ -152,23 +223,37 @@ export default function SettingsPage() {
               Set these to what you actually have — they start at ৳0 and
               aren&apos;t filled in from your income automatically.
             </p>
-            {accounts.map((acc) => (
-              <div key={acc.id} className="flex items-end gap-2">
-                <div className="flex-1 space-y-1">
-                  <Label>{acc.name}</Label>
-                  <Input
-                    type="number"
-                    value={balanceInputs[acc.id] ?? ""}
-                    onChange={(e) =>
-                      setBalanceInputs((prev) => ({ ...prev, [acc.id]: e.target.value }))
-                    }
-                  />
-                </div>
-                <Button variant="secondary" onClick={() => saveAccountBalance(acc)}>
-                  Save
-                </Button>
+            {accounts === null ? (
+              <div className="space-y-2">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
               </div>
-            ))}
+            ) : (
+              accounts.map((acc) => (
+                <div key={acc.id} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor={`bal-${acc.id}`}>{acc.name}</Label>
+                    <Input
+                      id={`bal-${acc.id}`}
+                      type="number"
+                      min={0}
+                      value={balanceInputs[acc.id] ?? ""}
+                      onChange={(e) =>
+                        setBalanceInputs((prev) => ({ ...prev, [acc.id]: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => saveAccountBalance(acc)}
+                    disabled={savingAccountId === acc.id}
+                  >
+                    {savingAccountId === acc.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save
+                  </Button>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -190,6 +275,7 @@ export default function SettingsPage() {
                 disabled={syncing}
                 className="w-full"
               >
+                {syncing && <Loader2 className="h-4 w-4 animate-spin" />}
                 {syncing ? "Syncing…" : "Sync now"}
               </Button>
             )}
@@ -209,18 +295,10 @@ export default function SettingsPage() {
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={async () => {
-                  if (!email) return;
-                  const supabase = createClient();
-                  if (!supabase) return;
-                  const { error } = await supabase.auth.resetPasswordForEmail(email);
-                  alert(
-                    error
-                      ? `Failed to send reset email: ${error.message}`
-                      : "Password reset email sent.",
-                  );
-                }}
+                onClick={handleChangePassword}
+                disabled={!email || resettingPassword}
               >
+                {resettingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
                 Change password
               </Button>
             </CardContent>
@@ -234,6 +312,7 @@ export default function SettingsPage() {
               variant="outline"
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label="Toggle theme"
             >
               {theme === "dark" ? (
                 <Sun className="h-4 w-4" />
@@ -247,18 +326,10 @@ export default function SettingsPage() {
         <Button
           variant="outline"
           className="w-full"
-          onClick={async () => {
-            if (
-              confirm(
-                "Fix database errors? This clears all local Finance OS data and returns you to onboarding.",
-              )
-            ) {
-              await resetLocalDatabase();
-              setUserId(null);
-              router.push("/onboarding");
-            }
-          }}
+          onClick={handleRepairDatabase}
+          disabled={repairing}
         >
+          {repairing && <Loader2 className="h-4 w-4 animate-spin" />}
           Repair local database
         </Button>
 

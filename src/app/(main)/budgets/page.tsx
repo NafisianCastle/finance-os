@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   budgetHealthScore,
   suggestBudgets,
@@ -15,14 +18,18 @@ import type { Budget, Category } from "@/infrastructure/db/dexie/schema";
 import { enqueueSync } from "@/infrastructure/sync/sync-queue";
 import { TX_TYPES } from "@/lib/constants";
 import { bdtToPoisha, formatMoney, poishaToBdt } from "@/lib/money";
-import { ymKey } from "@/lib/utils";
+import { cn, ymKey } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { endOfMonth, isWithinInterval, parseISO, startOfMonth } from "date-fns";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
 
 export default function BudgetsPage() {
   const userId = useAppStore((s) => s.userId);
+  const { toast } = useToast();
+  const confirm = useConfirm();
+  const [loaded, setLoaded] = useState(false);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryMap, setCategoryMap] = useState<Record<string, Category>>({});
@@ -81,6 +88,7 @@ export default function BudgetsPage() {
       spent: spent[bg.categoryId] ?? 0,
     }));
     setHealth(budgetHealthScore(allocs));
+    setLoaded(true);
   }
 
   useEffect(() => {
@@ -88,7 +96,11 @@ export default function BudgetsPage() {
   }, [userId]);
 
   async function applySuggestions() {
-    if (!userId || income <= 0) return;
+    if (!userId) return;
+    if (income <= 0) {
+      toast("Set your monthly income in Settings first.", "error");
+      return;
+    }
     const suggestions = suggestBudgets(income);
     const ym = ymKey();
     const now = new Date().toISOString();
@@ -121,7 +133,8 @@ export default function BudgetsPage() {
         });
       }
     }
-    load();
+    await load();
+    toast("Suggested budgets applied.", "success");
   }
 
   function startEdit(b: Budget) {
@@ -149,7 +162,8 @@ export default function BudgetsPage() {
       carry_poisha: b.carryPoisha ?? 0,
     });
     setEditingId(null);
-    load();
+    await load();
+    toast("Budget updated.", "success");
   }
 
   function cancelEdit() {
@@ -160,6 +174,14 @@ export default function BudgetsPage() {
 
   async function deleteBudget(b: Budget) {
     if (!userId) return;
+    const catName = categoryMap[b.categoryId]?.name || b.categoryId;
+    const ok = await confirm({
+      title: `Delete "${catName}" budget?`,
+      description: "This can't be undone.",
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (!ok) return;
     const db = getDb();
     const now = new Date().toISOString();
     await db.budgets.update(b.id, { deletedAt: now, updatedAt: now });
@@ -171,7 +193,8 @@ export default function BudgetsPage() {
       carry_poisha: b.carryPoisha ?? 0,
       deleted_at: now,
     });
-    load();
+    await load();
+    toast(`Budget "${catName}" deleted.`, "success");
   }
 
   async function addBudget() {
@@ -216,7 +239,21 @@ export default function BudgetsPage() {
     setAdding(false);
     setNewCategoryId("");
     setNewAmountBdt("");
-    load();
+    await load();
+    toast("Budget added.", "success");
+  }
+
+  if (!loaded) {
+    return (
+      <AppShell title="Budgets">
+        <div className="space-y-4">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </AppShell>
+    );
   }
 
   return (
@@ -380,7 +417,7 @@ export default function BudgetsPage() {
               return (
                 <Card
                   key={b.id}
-                  className={over ? "border-destructive/50" : ""}
+                  className={cn("transition-colors hover:bg-accent/40", over && "border-destructive/50")}
                 >
                   <CardContent className="pt-4 space-y-2">
                     <div className="flex justify-between capitalize">

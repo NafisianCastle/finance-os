@@ -8,17 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { formatMoney, bdtToPoisha } from "@/lib/money";
 import type { Goal } from "@/infrastructure/db/dexie/schema";
 import { enqueueSync } from "@/infrastructure/sync/sync-queue";
+import { Loader2, Target } from "lucide-react";
 
 export default function GoalsPage() {
   const userId = useAppStore((s) => s.userId);
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const { toast } = useToast();
+  const [goals, setGoals] = useState<Goal[] | null>(null);
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
+  const [adding, setAdding] = useState(false);
 
   async function load() {
     if (!userId) return;
@@ -31,13 +37,23 @@ export default function GoalsPage() {
   }, [userId]);
 
   async function addGoal() {
-    if (!userId || !name || !target) return;
+    if (!userId) return;
+    if (!name.trim()) {
+      toast("Enter a goal name.", "error");
+      return;
+    }
+    const targetBdt = parseFloat(target);
+    if (Number.isNaN(targetBdt) || targetBdt <= 0) {
+      toast("Enter a target amount greater than 0.", "error");
+      return;
+    }
+    setAdding(true);
     const now = new Date().toISOString();
     const g: Goal = {
       id: uuid(),
       userId,
-      name,
-      targetPoisha: bdtToPoisha(parseFloat(target)),
+      name: name.trim(),
+      targetPoisha: bdtToPoisha(targetBdt),
       savedPoisha: 0,
       createdAt: now,
       updatedAt: now,
@@ -51,7 +67,9 @@ export default function GoalsPage() {
     });
     setName("");
     setTarget("");
-    load();
+    setAdding(false);
+    await load();
+    toast(`Goal "${g.name}" added.`, "success");
   }
 
   return (
@@ -67,29 +85,45 @@ export default function GoalsPage() {
               <Label>Target (BDT)</Label>
               <Input type="number" value={target} onChange={(e) => setTarget(e.target.value)} />
             </div>
-            <Button onClick={addGoal} className="w-full">Add goal</Button>
+            <Button onClick={addGoal} className="w-full" disabled={adding}>
+              {adding && <Loader2 className="h-4 w-4 animate-spin" />}
+              Add goal
+            </Button>
           </CardContent>
         </Card>
-        {goals.map((g) => {
-          const pct = g.targetPoisha > 0 ? (g.savedPoisha / g.targetPoisha) * 100 : 0;
-          const remaining = g.targetPoisha - g.savedPoisha;
-          const monthlyHint = remaining > 0 ? `Save ~${formatMoney(Math.ceil(remaining / 12))}/mo to reach in 1 year` : "Complete!";
-          return (
-            <Card key={g.id}>
-              <CardContent className="pt-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-medium">{g.name}</span>
-                  <span className="text-sm">{Math.round(pct)}%</span>
-                </div>
-                <Progress value={pct} />
-                <p className="text-xs text-muted-foreground">
-                  {formatMoney(g.savedPoisha)} of {formatMoney(g.targetPoisha)}
-                </p>
-                <p className="text-xs text-primary">{monthlyHint}</p>
-              </CardContent>
-            </Card>
-          );
-        })}
+        {goals === null ? (
+          <div className="space-y-3">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : goals.length === 0 ? (
+          <EmptyState
+            icon={Target}
+            title="No goals yet"
+            description="Add a savings goal above to start tracking progress."
+          />
+        ) : (
+          goals.map((g) => {
+            const pct = g.targetPoisha > 0 ? (g.savedPoisha / g.targetPoisha) * 100 : 0;
+            const remaining = g.targetPoisha - g.savedPoisha;
+            const monthlyHint = remaining > 0 ? `Save ~${formatMoney(Math.ceil(remaining / 12))}/mo to reach in 1 year` : "Complete!";
+            return (
+              <Card key={g.id} className="transition-colors hover:bg-accent/40">
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="font-medium">{g.name}</span>
+                    <span className="text-sm">{Math.round(pct)}%</span>
+                  </div>
+                  <Progress value={pct} />
+                  <p className="text-xs text-muted-foreground">
+                    {formatMoney(g.savedPoisha)} of {formatMoney(g.targetPoisha)}
+                  </p>
+                  <p className="text-xs text-primary">{monthlyHint}</p>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
     </AppShell>
   );
