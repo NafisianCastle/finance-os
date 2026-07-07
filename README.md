@@ -2,6 +2,8 @@
 
 Personal financial intelligence assistant — mobile-first Next.js PWA with local-first Dexie storage and optional Supabase sync.
 
+**Live:** [finance-os-orpin-phi.vercel.app](https://finance-os-orpin-phi.vercel.app/)
+
 ## Features (MVP)
 
 - Income / expense / transfer tracking (BDT default)
