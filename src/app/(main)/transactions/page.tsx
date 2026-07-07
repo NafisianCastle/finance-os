@@ -31,7 +31,7 @@ export default function TransactionsPage() {
   return (
     <AppShell title="Activity">
       <div className="space-y-3">
-        <Link href="/transactions/new">
+        <Link href="/transactions/new" className="block">
           <Button className="w-full">
             <Plus className="h-4 w-4" />
             Add transaction

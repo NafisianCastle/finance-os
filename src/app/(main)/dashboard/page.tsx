@@ -302,7 +302,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Link href="/smart-buy">
+        <Link href="/smart-buy" className="block">
           <Button variant="secondary" className="w-full">
             <Brain className="h-4 w-4" />
             Smart Buy
