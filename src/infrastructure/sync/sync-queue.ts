@@ -465,6 +465,75 @@ export async function mergeDuplicateAccounts(
 }
 
 /**
+ * Merges goals duplicated by the same onboarding-style race as
+ * mergeDuplicateAccounts: goals have no unique constraint on the server, so
+ * a fresh browser re-creating a goal with a new uuid produced real duplicate
+ * rows remotely. Groups by name, keeps the oldest per group, sums saved
+ * amounts into it, and soft deletes the rest. No other table references
+ * goals by id, so there's nothing to re-point.
+ */
+export async function mergeDuplicateGoals(
+  userId: string
+): Promise<{ merged: number; groups: number }> {
+  const supabase = createClient();
+  if (!supabase) return { merged: 0, groups: 0 };
+
+  const { data: goals, error } = await supabase
+    .from("goals")
+    .select("*")
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+  if (error || !goals) return { merged: 0, groups: 0 };
+
+  const groups = new Map<string, typeof goals>();
+  for (const goal of goals) {
+    const key = (goal.name as string).trim().toLowerCase();
+    const list = groups.get(key) ?? [];
+    list.push(goal);
+    groups.set(key, list);
+  }
+
+  let merged = 0;
+  let groupsAffected = 0;
+  const now = new Date().toISOString();
+
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    groupsAffected++;
+
+    const sorted = [...group].sort(
+      (a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime()
+    );
+    const canonical = sorted[0];
+    const dupes = sorted.slice(1);
+    const totalSaved = group.reduce((sum, g) => sum + Number(g.saved_poisha), 0);
+
+    for (const dupe of dupes) {
+      await supabase
+        .from("goals")
+        .update({ deleted_at: now, updated_at: now })
+        .eq("user_id", userId)
+        .eq("id", dupe.id);
+      merged++;
+    }
+
+    await supabase
+      .from("goals")
+      .update({ saved_poisha: totalSaved, updated_at: now })
+      .eq("user_id", userId)
+      .eq("id", canonical.id);
+  }
+
+  if (groupsAffected > 0) {
+    const db = getDb();
+    await db.syncQueue.filter((i) => i.table === "goals").delete();
+    await pullRemoteChanges(userId, null);
+  }
+
+  return { merged, groups: groupsAffected };
+}
+
+/**
  * Fixes local budget duplicates caused by the same onboarding-style race as
  * mergeDuplicateAccounts: a fresh browser's empty local Dexie made
  * applySuggestions/addBudget think no budget existed for a category yet, so

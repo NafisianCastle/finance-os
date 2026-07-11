@@ -11,9 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { formatMoney, bdtToPoisha } from "@/lib/money";
-import type { Debt } from "@/infrastructure/db/dexie/schema";
+import type { Debt, Account } from "@/infrastructure/db/dexie/schema";
 import { DEBT_STATUS } from "@/lib/constants";
 import { enqueueSync } from "@/infrastructure/sync/sync-queue";
+import { repayDebt } from "@/application/debts";
+import { useToast } from "@/components/ui/toast";
 import { AlertTriangle } from "lucide-react";
 
 function debtPressureLevel(debtToIncomePct: number): {
@@ -28,12 +30,17 @@ function debtPressureLevel(debtToIncomePct: number): {
 
 export default function DebtPage() {
   const userId = useAppStore((s) => s.userId);
+  const { toast } = useToast();
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [monthlyIncome, setMonthlyIncome] = useState(0);
   const [lender, setLender] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [interestRate, setInterestRate] = useState("");
+  const [repayingId, setRepayingId] = useState<string | null>(null);
+  const [repayAmount, setRepayAmount] = useState("");
+  const [repayAccountId, setRepayAccountId] = useState("");
 
   async function load() {
     if (!userId) return;
@@ -42,9 +49,28 @@ export default function DebtPage() {
     setDebts(all);
     const profile = await db.userProfiles.where("userId").equals(userId).first();
     setMonthlyIncome(profile?.monthlyIncomePoisha ?? 0);
+    const accs = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
+    setAccounts(accs);
+    setRepayAccountId((prev) => prev || accs[0]?.id || "");
   }
 
   useEffect(() => { load(); }, [userId]);
+
+  function startRepay(debt: Debt) {
+    setRepayingId(debt.id);
+    setRepayAmount((debt.remainingPoisha / 100).toString());
+  }
+
+  async function submitRepay(debt: Debt) {
+    if (!userId || !repayAccountId) return;
+    const poisha = bdtToPoisha(parseFloat(repayAmount) || 0);
+    if (poisha <= 0) return;
+    await repayDebt(userId, debt, poisha, repayAccountId);
+    setRepayingId(null);
+    setRepayAmount("");
+    toast("Repayment recorded.", "success");
+    load();
+  }
 
   async function addDebt() {
     if (!userId) return;
@@ -174,26 +200,64 @@ export default function DebtPage() {
           const isOverdue = d.dueDate && d.dueDate < today && d.status === DEBT_STATUS.ACTIVE;
           return (
             <Card key={d.id} className={isOverdue ? "border-destructive/40" : ""}>
-              <CardContent className="flex justify-between items-start py-4">
-                <div>
-                  <p className="font-medium">{d.lender}</p>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    {isOverdue ? (
-                      <Badge variant="destructive" className="text-xs">Overdue</Badge>
-                    ) : d.status === DEBT_STATUS.PAID ? (
-                      <Badge variant="secondary" className="text-xs">Paid</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs">Active</Badge>
-                    )}
-                    {d.dueDate && (
-                      <p className="text-xs text-muted-foreground">Due {d.dueDate}</p>
-                    )}
-                    {d.interestRate != null && (
-                      <p className="text-xs text-muted-foreground">{d.interestRate}% p.a.</p>
-                    )}
+              <CardContent className="py-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium">{d.lender}</p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {isOverdue ? (
+                        <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                      ) : d.status === DEBT_STATUS.PAID ? (
+                        <Badge variant="secondary" className="text-xs">Paid</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs">Active</Badge>
+                      )}
+                      {d.dueDate && (
+                        <p className="text-xs text-muted-foreground">Due {d.dueDate}</p>
+                      )}
+                      {d.interestRate != null && (
+                        <p className="text-xs text-muted-foreground">{d.interestRate}% p.a.</p>
+                      )}
+                    </div>
                   </div>
+                  <p className="font-semibold text-destructive">{formatMoney(d.remainingPoisha)}</p>
                 </div>
-                <p className="font-semibold text-destructive">{formatMoney(d.remainingPoisha)}</p>
+                {d.status !== DEBT_STATUS.PAID && (
+                  repayingId === d.id ? (
+                    <div className="space-y-2 border-t pt-3">
+                      <div className="space-y-2">
+                        <Label>Amount paid (BDT)</Label>
+                        <Input
+                          type="number"
+                          value={repayAmount}
+                          onChange={(e) => setRepayAmount(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Pay from</Label>
+                        <select
+                          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                          value={repayAccountId}
+                          onChange={(e) => setRepayAccountId(e.target.value)}
+                        >
+                          {accounts.map((a) => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={() => submitRepay(d)} className="flex-1">Confirm</Button>
+                        <Button variant="outline" onClick={() => setRepayingId(null)} className="flex-1">
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => startRepay(d)}>
+                      Record repayment
+                    </Button>
+                  )
+                )}
               </CardContent>
             </Card>
           );

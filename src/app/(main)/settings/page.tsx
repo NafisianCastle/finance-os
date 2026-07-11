@@ -18,6 +18,7 @@ import {
   exportUserDataAsJson,
   forceFullResync,
   mergeDuplicateAccounts,
+  mergeDuplicateGoals,
   processSyncQueue,
   repairAccountSync,
   repairLocalBudgets,
@@ -207,33 +208,30 @@ export default function SettingsPage() {
     toast(msg, errors ? "error" : "success");
   }
 
-  async function handleMergeDuplicates() {
+  async function handleFixDuplicates() {
     if (!userId) return;
     const ok = await confirm({
-      title: "Merge duplicate accounts?",
+      title: "Fix duplicates?",
       description:
-        "Combines accounts with the same name (e.g. two \"Cash\" accounts) into one, summing their balances and re-pointing transactions. This changes remote data immediately and can't be undone.",
-      confirmLabel: "Merge",
+        "Merges accounts and goals with the same name (summing their balances/saved amounts) and refreshes budgets from the server. This changes remote data immediately and can't be undone.",
+      confirmLabel: "Fix",
       variant: "destructive",
     });
     if (!ok) return;
     setSyncing(true);
-    const { merged, groups } = await mergeDuplicateAccounts(userId);
-    setSyncing(false);
-    toast(
-      groups > 0
-        ? `Merged ${merged} duplicate account(s) across ${groups} group(s).`
-        : "No duplicate accounts found.",
-      "success"
-    );
-  }
-
-  async function handleRepairBudgets() {
-    if (!userId) return;
-    setSyncing(true);
+    const [{ merged: mergedAccounts, groups: accountGroups }, { merged: mergedGoals, groups: goalGroups }] =
+      await Promise.all([mergeDuplicateAccounts(userId), mergeDuplicateGoals(userId)]);
     await repairLocalBudgets(userId);
     setSyncing(false);
-    toast("Budgets refreshed from the server.", "success");
+    const parts: string[] = [];
+    if (accountGroups > 0) parts.push(`${mergedAccounts} account(s)`);
+    if (goalGroups > 0) parts.push(`${mergedGoals} goal(s)`);
+    toast(
+      parts.length > 0
+        ? `Fixed duplicates: merged ${parts.join(", ")}, budgets refreshed.`
+        : "No duplicates found. Budgets refreshed.",
+      "success"
+    );
   }
 
   async function handleForceResync() {
@@ -463,31 +461,18 @@ export default function SettingsPage() {
             )}
             {isSupabaseConfigured() && (
               <>
-                <p className="text-sm font-medium mt-2">Duplicate accounts</p>
+                <p className="text-sm font-medium mt-2">Duplicates</p>
                 <p className="text-sm text-muted-foreground">
-                  If you see the same account (e.g. two &quot;Cash&quot;) after
-                  using multiple browsers, merge them into one.
+                  If accounts, budgets, or goals show up twice after using
+                  multiple browsers, fix them all in one go.
                 </p>
                 <Button
-                  onClick={handleMergeDuplicates}
+                  onClick={handleFixDuplicates}
                   disabled={syncing}
                   variant="outline"
                   className="w-full"
                 >
-                  Merge duplicate accounts
-                </Button>
-                <p className="text-sm font-medium mt-2">Duplicate budgets</p>
-                <p className="text-sm text-muted-foreground">
-                  If a budget category shows up twice, refresh budgets from
-                  the server to clear the duplicate.
-                </p>
-                <Button
-                  onClick={handleRepairBudgets}
-                  disabled={syncing}
-                  variant="outline"
-                  className="w-full"
-                >
-                  Repair budgets
+                  Fix duplicates
                 </Button>
               </>
             )}
