@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { SerwistProvider } from "@serwist/next/react";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { ConfirmDialogProvider } from "@/components/ui/confirm-dialog";
@@ -24,20 +26,25 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
+    <html lang={locale} suppressHydrationWarning className={cn("font-sans", geist.variable)}>
       <body>
-        <SerwistProvider swUrl="/sw.js" disable={process.env.NODE_ENV === "development"}>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-            <ToastProvider>
-              <ConfirmDialogProvider>
-                <UpdateBanner />
-                {children}
-              </ConfirmDialogProvider>
-            </ToastProvider>
-          </ThemeProvider>
-        </SerwistProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <SerwistProvider swUrl="/sw.js" disable={process.env.NODE_ENV === "development"}>
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+              <ToastProvider>
+                <ConfirmDialogProvider>
+                  <UpdateBanner />
+                  {children}
+                </ConfirmDialogProvider>
+              </ToastProvider>
+            </ThemeProvider>
+          </SerwistProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

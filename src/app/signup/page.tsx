@@ -11,9 +11,11 @@ import {
 import { useAppStore } from "@/store/app-store";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 export default function SignupPage() {
+  const t = useTranslations("Auth");
   const router = useRouter();
   const setUserId = useAppStore((s) => s.setUserId);
   const userId = useAppStore((s) => s.userId);
@@ -41,13 +43,13 @@ export default function SignupPage() {
   async function handleSignup() {
     setError("");
     if (!isSupabaseConfigured()) {
-      setError("Supabase auth is not configured.");
+      setError(t("notConfigured"));
       return;
     }
 
     const supabase = createClient();
     if (!supabase) {
-      setError("Unable to initialize Supabase client.");
+      setError(t("clientInitFailed"));
       return;
     }
 
@@ -69,7 +71,7 @@ export default function SignupPage() {
       return;
     }
 
-    setError("Sign-up succeeded, but we could not complete authentication.");
+    setError(t("signupIncomplete"));
     setLoading(false);
   }
 
@@ -77,11 +79,11 @@ export default function SignupPage() {
     <div className="mx-auto min-h-screen max-w-md px-4 py-8">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Create account</CardTitle>
+          <CardTitle className="text-2xl">{t("createAccount")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("email")}</Label>
             <Input
               id="email"
               type="email"
@@ -91,7 +93,7 @@ export default function SignupPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t("password")}</Label>
             <Input
               id="password"
               type="password"
@@ -106,12 +108,12 @@ export default function SignupPage() {
             onClick={handleSignup}
             disabled={loading || !email || !password}
           >
-            {loading ? "Creating account…" : "Sign up"}
+            {loading ? t("creatingAccount") : t("signUp")}
           </Button>
           <p className="text-sm text-muted-foreground">
-            Already have an account?{" "}
+            {t("alreadyHaveAccount")}{" "}
             <Link href="/login" className="text-primary underline">
-              Log in
+              {t("login")}
             </Link>
             .
           </p>

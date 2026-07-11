@@ -1,12 +1,17 @@
 import { v4 as uuid } from "uuid";
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { SYSTEM_CATEGORIES } from "@/lib/constants";
-import { bdtToPoisha } from "@/lib/money";
+import { DEFAULT_CURRENCY, DEFAULT_LOCALE, SYSTEM_CATEGORIES } from "@/lib/constants";
+import { majorToMinorUnits } from "@/lib/money";
 import type { UserProfile, Account, Category } from "@/infrastructure/db/dexie/schema";
 import { enqueueSync, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 
-export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
+export async function seedUserData(
+  userId: string,
+  monthlyIncome: number,
+  currencyCode: string = DEFAULT_CURRENCY,
+  locale: string = DEFAULT_LOCALE
+) {
   const db = getDb();
   const now = new Date().toISOString();
 
@@ -25,9 +30,9 @@ export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
   const profile: UserProfile = {
     id: uuid(),
     userId,
-    monthlyIncomePoisha: bdtToPoisha(monthlyIncomeBdt),
-    currencyCode: "BDT",
-    locale: "bn-BD",
+    monthlyIncomePoisha: majorToMinorUnits(monthlyIncome, currencyCode),
+    currencyCode,
+    locale,
     emergencyMonths: 3,
     onboardingComplete: true,
     createdAt: now,

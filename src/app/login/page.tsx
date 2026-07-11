@@ -11,9 +11,11 @@ import {
 import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 export default function LoginPage() {
+  const t = useTranslations("Auth");
   const router = useRouter();
   const setUserId = useAppStore((s) => s.setUserId);
   const userId = useAppStore((s) => s.userId);
@@ -46,13 +48,13 @@ export default function LoginPage() {
   async function handleLogin() {
     setError("");
     if (!isSupabaseConfigured()) {
-      setError("Supabase auth is not configured.");
+      setError(t("notConfigured"));
       return;
     }
 
     const supabase = createClient();
     if (!supabase) {
-      setError("Unable to initialize Supabase client.");
+      setError(t("clientInitFailed"));
       return;
     }
 
@@ -65,7 +67,7 @@ export default function LoginPage() {
     );
 
     if (signInError || !data.session?.user?.id) {
-      setError(signInError?.message ?? "Login failed. Please try again.");
+      setError(signInError?.message ?? t("loginFailed"));
       setLoading(false);
       return;
     }
@@ -78,11 +80,11 @@ export default function LoginPage() {
     <div className="mx-auto min-h-screen max-w-md px-4 py-8">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardTitle className="text-2xl">{t("login")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("email")}</Label>
             <Input
               id="email"
               type="email"
@@ -92,7 +94,7 @@ export default function LoginPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t("password")}</Label>
             <Input
               id="password"
               type="password"
@@ -107,12 +109,12 @@ export default function LoginPage() {
             onClick={handleLogin}
             disabled={loading || !email || !password}
           >
-            {loading ? "Logging in…" : "Log in"}
+            {loading ? t("loggingIn") : t("login")}
           </Button>
           <p className="text-sm text-muted-foreground">
-            New here?{" "}
+            {t("newHere")}{" "}
             <Link href="/signup" className="text-primary underline">
-              Create an account
+              {t("createAccount")}
             </Link>
             .
           </p>

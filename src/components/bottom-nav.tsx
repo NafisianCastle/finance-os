@@ -2,23 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Home, List, PieChart, Target, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/transactions", label: "Activity", icon: List },
-  { href: "/budgets", label: "Budgets", icon: PieChart },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/more", label: "More", icon: Menu },
-];
+  { href: "/dashboard", key: "home", icon: Home },
+  { href: "/transactions", key: "activity", icon: List },
+  { href: "/budgets", key: "budgets", icon: PieChart },
+  { href: "/goals", key: "goals", icon: Target },
+  { href: "/more", key: "more", icon: Menu },
+] as const;
 
 export function BottomNav() {
   const pathname = usePathname();
+  const t = useTranslations("Nav");
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-safe pt-2">
-        {links.map(({ href, label, icon: Icon }) => {
+        {links.map(({ href, key, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
@@ -30,7 +32,7 @@ export function BottomNav() {
               )}
             >
               <Icon className="h-5 w-5" />
-              <span>{label}</span>
+              <span>{t(key)}</span>
             </Link>
           );
         })}

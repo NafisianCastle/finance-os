@@ -18,15 +18,18 @@ import type { Budget, Category } from "@/infrastructure/db/dexie/schema";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import { enqueueSync, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
 import { TX_TYPES } from "@/lib/constants";
-import { bdtToPoisha, formatMoney, poishaToBdt } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { cn, ymKey } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { endOfMonth, isWithinInterval, parseISO, startOfMonth } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { v4 as uuid } from "uuid";
 
 export default function BudgetsPage() {
+  const t = useTranslations("Budgets");
+  const { format, toMinor, toMajor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -107,7 +110,7 @@ export default function BudgetsPage() {
   async function applySuggestions() {
     if (!userId) return;
     if (income <= 0) {
-      toast("Set your monthly income in Settings first.", "error");
+      toast(t("setIncomeFirst"), "error");
       return;
     }
     const suggestions = suggestBudgets(income);
@@ -143,25 +146,25 @@ export default function BudgetsPage() {
       }
     }
     await load();
-    toast("Suggested budgets applied.", "success");
+    toast(t("suggestionsApplied"), "success");
   }
 
   function startEdit(b: Budget) {
     setEditingId(b.id);
-    setEditAmountBdt(String(poishaToBdt(b.allocatedPoisha)));
+    setEditAmountBdt(String(toMajor(b.allocatedPoisha)));
   }
 
   async function saveEdit(b: Budget) {
     setError("");
     const amount = Number(editAmountBdt) || 0;
     if (amount <= 0) {
-      setError("Amount must be greater than 0");
+      setError(t("amountMustBePositive"));
       return;
     }
     if (!userId) return;
     const db = getDb();
     const now = new Date().toISOString();
-    const poisha = bdtToPoisha(amount);
+    const poisha = toMinor(amount);
     await db.budgets.update(b.id, { allocatedPoisha: poisha, updatedAt: now });
     await enqueueSync("budgets", b.id, "upsert", {
       id: b.id,
@@ -172,7 +175,7 @@ export default function BudgetsPage() {
     });
     setEditingId(null);
     await load();
-    toast("Budget updated.", "success");
+    toast(t("budgetUpdated"), "success");
   }
 
   function cancelEdit() {
@@ -185,9 +188,9 @@ export default function BudgetsPage() {
     if (!userId) return;
     const catName = categoryMap[b.categoryId]?.name || b.categoryId;
     const ok = await confirm({
-      title: `Delete "${catName}" budget?`,
-      description: "This can't be undone.",
-      confirmLabel: "Delete",
+      title: t("deleteBudgetTitle", { name: catName }),
+      description: t("deleteBudgetDescription"),
+      confirmLabel: t("delete"),
       variant: "destructive",
     });
     if (!ok) return;
@@ -203,24 +206,24 @@ export default function BudgetsPage() {
       deleted_at: now,
     });
     await load();
-    toast(`Budget "${catName}" deleted.`, "success");
+    toast(t("budgetDeleted", { name: catName }), "success");
   }
 
   async function addBudget() {
     setError("");
     if (!userId || !newCategoryId) {
-      setError("Please select a category");
+      setError(t("selectCategory"));
       return;
     }
     const amount = Number(newAmountBdt) || 0;
     if (amount <= 0) {
-      setError("Amount must be greater than 0");
+      setError(t("amountMustBePositive"));
       return;
     }
 
     const existing = budgets.find((b) => b.categoryId === newCategoryId);
     if (existing) {
-      setError("Budget already exists for this category. Use Edit instead.");
+      setError(t("budgetAlreadyExists"));
       return;
     }
 
@@ -232,7 +235,7 @@ export default function BudgetsPage() {
       userId,
       ym,
       categoryId: newCategoryId,
-      allocatedPoisha: bdtToPoisha(amount),
+      allocatedPoisha: toMinor(amount),
       carryPoisha: 0,
       createdAt: now,
       updatedAt: now,
@@ -249,12 +252,12 @@ export default function BudgetsPage() {
     setNewCategoryId("");
     setNewAmountBdt("");
     await load();
-    toast("Budget added.", "success");
+    toast(t("budgetAdded"), "success");
   }
 
   if (!loaded) {
     return (
-      <AppShell title="Budgets">
+      <AppShell title={t("title")}>
         <div className="space-y-4">
           <Skeleton className="h-28 w-full" />
           <Skeleton className="h-10 w-full" />
@@ -266,11 +269,11 @@ export default function BudgetsPage() {
   }
 
   return (
-    <AppShell title="Budgets">
+    <AppShell title={t("title")}>
       <div className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Budget health</CardTitle>
+            <CardTitle className="text-base">{t("budgetHealth")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-end gap-2 mb-2">
@@ -286,7 +289,7 @@ export default function BudgetsPage() {
           variant="secondary"
           onClick={applySuggestions}
         >
-          Apply suggested budgets
+          {t("applySuggestedBudgets")}
         </Button>
 
         <Button
@@ -297,7 +300,7 @@ export default function BudgetsPage() {
             setError("");
           }}
         >
-          {adding ? "Cancel" : "Set budget"}
+          {adding ? t("cancel") : t("setBudget")}
         </Button>
 
         {error && (
@@ -311,20 +314,20 @@ export default function BudgetsPage() {
         {budgets.length === 0 ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground text-center py-4">
-              No budgets yet. Apply suggestions based on your income.
+              {t("noBudgetsYet")}
             </p>
             {adding && (
               <Card>
                 <CardContent className="space-y-3 pt-4">
                   <div>
-                    <Label htmlFor="cat-select">Category</Label>
+                    <Label htmlFor="cat-select">{t("category")}</Label>
                     <select
                       id="cat-select"
                       className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       value={newCategoryId}
                       onChange={(e) => setNewCategoryId(e.target.value)}
                     >
-                      <option value="">-- Select Category --</option>
+                      <option value="">{t("selectCategoryPlaceholder")}</option>
                       {categories.map((cat) => (
                         <option key={cat.id} value={cat.id}>
                           {cat.name}
@@ -333,7 +336,7 @@ export default function BudgetsPage() {
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor="amt-input">Amount (BDT)</Label>
+                    <Label htmlFor="amt-input">{t("amountLabel", { currency: currencyCode })}</Label>
                     <Input
                       id="amt-input"
                       type="number"
@@ -341,11 +344,11 @@ export default function BudgetsPage() {
                       step="1"
                       value={newAmountBdt}
                       onChange={(e) => setNewAmountBdt(e.target.value)}
-                      placeholder="Enter amount"
+                      placeholder={t("enterAmount")}
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={addBudget}>Add</Button>
+                    <Button onClick={addBudget}>{t("add")}</Button>
                     <Button
                       variant="ghost"
                       onClick={() => {
@@ -355,7 +358,7 @@ export default function BudgetsPage() {
                         setError("");
                       }}
                     >
-                      Cancel
+                      {t("cancel")}
                     </Button>
                   </div>
                 </CardContent>
@@ -368,14 +371,14 @@ export default function BudgetsPage() {
               <Card>
                 <CardContent className="space-y-3 pt-4">
                   <div>
-                    <Label htmlFor="cat-select-2">Category</Label>
+                    <Label htmlFor="cat-select-2">{t("category")}</Label>
                     <select
                       id="cat-select-2"
                       className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       value={newCategoryId}
                       onChange={(e) => setNewCategoryId(e.target.value)}
                     >
-                      <option value="">-- Select Category --</option>
+                      <option value="">{t("selectCategoryPlaceholder")}</option>
                       {categories
                         .filter(
                           (cat) =>
@@ -389,7 +392,7 @@ export default function BudgetsPage() {
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor="amt-input-2">Amount (BDT)</Label>
+                    <Label htmlFor="amt-input-2">{t("amountLabel", { currency: currencyCode })}</Label>
                     <Input
                       id="amt-input-2"
                       type="number"
@@ -397,11 +400,11 @@ export default function BudgetsPage() {
                       step="1"
                       value={newAmountBdt}
                       onChange={(e) => setNewAmountBdt(e.target.value)}
-                      placeholder="Enter amount"
+                      placeholder={t("enterAmount")}
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={addBudget}>Add</Button>
+                    <Button onClick={addBudget}>{t("add")}</Button>
                     <Button
                       variant="ghost"
                       onClick={() => {
@@ -411,7 +414,7 @@ export default function BudgetsPage() {
                         setError("");
                       }}
                     >
-                      Cancel
+                      {t("cancel")}
                     </Button>
                   </div>
                 </CardContent>
@@ -432,20 +435,20 @@ export default function BudgetsPage() {
                     <div className="flex justify-between capitalize">
                       <span className="font-medium">{catName}</span>
                       <span className="text-sm text-muted-foreground">
-                        {formatMoney(spent)} / {formatMoney(total)}
+                        {format(spent)} / {format(total)}
                       </span>
                     </div>
                     <Progress value={pct} />
                     {over && (
                       <p className="text-xs text-destructive">
-                        Overspending alert
+                        {t("overspendingAlert")}
                       </p>
                     )}
 
                     {editingId === b.id ? (
                       <div className="space-y-2">
                         <div>
-                          <Label htmlFor={`amt-${b.id}`}>Allocated (BDT)</Label>
+                          <Label htmlFor={`amt-${b.id}`}>{t("allocatedLabel", { currency: currencyCode })}</Label>
                           <Input
                             id={`amt-${b.id}`}
                             type="number"
@@ -457,14 +460,14 @@ export default function BudgetsPage() {
                         </div>
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => saveEdit(b)}>
-                            Save
+                            {t("save")}
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={cancelEdit}
                           >
-                            Cancel
+                            {t("cancel")}
                           </Button>
                         </div>
                       </div>
@@ -475,14 +478,14 @@ export default function BudgetsPage() {
                           variant="outline"
                           onClick={() => startEdit(b)}
                         >
-                          Edit
+                          {t("edit")}
                         </Button>
                         <Button
                           size="sm"
                           variant="destructive"
                           onClick={() => deleteBudget(b)}
                         >
-                          Delete
+                          {t("delete")}
                         </Button>
                       </div>
                     )}

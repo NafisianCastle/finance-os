@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { HealthCard } from "@/components/health-card";
@@ -12,7 +13,7 @@ import { useAppStore } from "@/store/app-store";
 import { useNotificationStore } from "@/store/notification-store";
 import { getDashboardMetrics } from "@/application/analytics";
 import { loadNotifications } from "@/application/notifications";
-import { formatMoney, poishaToBdt } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import {
   BarChart,
   Bar,
@@ -38,15 +39,6 @@ const CATEGORY_COLORS = [
   "oklch(var(--chart-5))",
 ];
 
-const MATURITY_LABELS: Record<string, string> = {
-  budget: "Budget",
-  savings: "Savings",
-  debt: "Debt",
-  smartBuy: "Smart Buy",
-  goals: "Goals",
-  impulse: "Impulse control",
-};
-
 function maturityColor(score: number) {
   if (score >= 70) return "hsl(var(--success))";
   if (score >= 40) return "hsl(var(--warning))";
@@ -54,6 +46,16 @@ function maturityColor(score: number) {
 }
 
 export default function DashboardPage() {
+  const t = useTranslations("Dashboard");
+  const { format, formatCompact } = useCurrencyFormatter();
+  const MATURITY_LABELS: Record<string, string> = {
+    budget: t("maturityBudget"),
+    savings: t("maturitySavings"),
+    debt: t("maturityDebt"),
+    smartBuy: t("maturitySmartBuy"),
+    goals: t("maturityGoals"),
+    impulse: t("maturityImpulse"),
+  };
   const userId = useAppStore((s) => s.userId);
   const setNotifications = useNotificationStore((s) => s.setNotifications);
   const notifications = useNotificationStore((s) => s.notifications);
@@ -69,7 +71,7 @@ export default function DashboardPage() {
 
   if (!metrics) {
     return (
-      <AppShell title="Dashboard">
+      <AppShell title={t("title")}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Skeleton className="h-20 w-full" />
@@ -101,7 +103,7 @@ export default function DashboardPage() {
   const otherTotal = categoryEntries.slice(4).reduce((s, [, v]) => s + v, 0);
   const spendBreakdown = [
     ...topCategories.map(([id, value]) => ({ name: CATEGORY_NAME[id] ?? id, value })),
-    ...(otherTotal > 0 ? [{ name: "Other", value: otherTotal }] : []),
+    ...(otherTotal > 0 ? [{ name: t("other"), value: otherTotal }] : []),
   ];
 
   const maturityBreakdown = Object.entries(maturity.components).map(([key, value]) => ({
@@ -110,12 +112,12 @@ export default function DashboardPage() {
   }));
 
   return (
-    <AppShell title="Dashboard">
+    <AppShell title={t("title")}>
       <div className="space-y-4">
         {cashflow.lowCashWarning && (
           <div className="flex items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm">
             <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0" />
-            <span>Low cash forecast — review spending this month</span>
+            <span>{t("lowCashWarning")}</span>
           </div>
         )}
 
@@ -132,7 +134,7 @@ export default function DashboardPage() {
             </div>
             <button
               type="button"
-              aria-label="Dismiss"
+              aria-label={t("dismiss")}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -147,31 +149,31 @@ export default function DashboardPage() {
 
         {hiddenOverdueCount > 0 && (
           <p className="text-xs text-muted-foreground px-1">
-            +{hiddenOverdueCount} more overdue — see notifications
+            {t("moreOverdue", { count: hiddenOverdueCount })}
           </p>
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <HealthCard title="Net worth" value={formatMoney(netWorth.netWorthPoisha)} variant="success" />
+          <HealthCard title={t("netWorth")} value={format(netWorth.netWorthPoisha)} variant="success" />
           <HealthCard
-            title="Spendable"
-            value={formatMoney(netWorth.spendablePoisha)}
-            subtitle="Excludes held money"
+            title={t("spendable")}
+            value={format(netWorth.spendablePoisha)}
+            subtitle={t("excludesHeldMoney")}
           />
         </div>
 
         {netWorth.heldLiabilitiesPoisha > 0 && (
           <HealthCard
-            title="Held for others"
-            value={formatMoney(netWorth.heldLiabilitiesPoisha)}
-            subtitle="Not your wealth — liability"
+            title={t("heldForOthers")}
+            value={format(netWorth.heldLiabilitiesPoisha)}
+            subtitle={t("notYourWealth")}
             variant="warning"
           />
         )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Financial maturity</CardTitle>
+            <CardTitle className="text-base">{t("financialMaturity")}</CardTitle>
             <Badge variant="secondary">{maturity.level}</Badge>
           </CardHeader>
           <CardContent>
@@ -184,34 +186,34 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Month-end forecast</CardTitle>
+            <CardTitle className="text-base">{t("monthEndForecast")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-semibold">{formatMoney(cashflow.projectedMonthEndPoisha)}</p>
+            <p className="text-xl font-semibold">{format(cashflow.projectedMonthEndPoisha)}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Daily burn ~{formatMoney(cashflow.dailyBurnPoisha)}
+              {t("dailyBurn", { amount: format(cashflow.dailyBurnPoisha) })}
             </p>
           </CardContent>
         </Card>
 
         <div className="grid grid-cols-2 gap-3">
-          <HealthCard title="Income" value={formatMoney(income)} />
-          <HealthCard title="Expenses" value={formatMoney(expense)} />
+          <HealthCard title={t("income")} value={format(income)} />
+          <HealthCard title={t("expenses")} value={format(expense)} />
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Income vs expense</CardTitle>
+            <CardTitle className="text-base">{t("incomeVsExpense")}</CardTitle>
           </CardHeader>
           <CardContent className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trend}>
                 <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                 <YAxis
-                  tickFormatter={(v) => `৳${poishaToBdt(v as number) / 1000}k`}
+                  tickFormatter={(v) => formatCompact(v as number)}
                   tick={{ fontSize: 10 }}
                 />
-                <Tooltip formatter={(v: number) => formatMoney(v)} />
+                <Tooltip formatter={(v: number) => format(v)} />
                 <Bar dataKey="income" fill="hsl(160 84% 32%)" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expense" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -222,7 +224,7 @@ export default function DashboardPage() {
         {spendBreakdown.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Top spending this month</CardTitle>
+              <CardTitle className="text-base">{t("topSpending")}</CardTitle>
             </CardHeader>
             <CardContent style={{ height: spendBreakdown.length * 36 + 8 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -240,13 +242,13 @@ export default function DashboardPage() {
                     tickLine={false}
                     axisLine={false}
                   />
-                  <Tooltip formatter={(v: number) => formatMoney(v)} />
+                  <Tooltip formatter={(v: number) => format(v)} />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
                     {spendBreakdown.map((entry, i) => (
                       <Cell
                         key={entry.name}
                         fill={
-                          entry.name === "Other"
+                          entry.name === t("other")
                             ? "oklch(var(--muted-foreground))"
                             : CATEGORY_COLORS[i % CATEGORY_COLORS.length]
                         }
@@ -255,7 +257,7 @@ export default function DashboardPage() {
                     <LabelList
                       dataKey="value"
                       position="right"
-                      formatter={(v: number) => formatMoney(v)}
+                      formatter={(v: number) => format(v)}
                       style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
                     />
                   </Bar>
@@ -267,7 +269,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Maturity breakdown</CardTitle>
+            <CardTitle className="text-base">{t("maturityBreakdown")}</CardTitle>
           </CardHeader>
           <CardContent style={{ height: maturityBreakdown.length * 32 + 8 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -305,7 +307,7 @@ export default function DashboardPage() {
         <Link href="/smart-buy" className="block">
           <Button variant="secondary" className="w-full">
             <Brain className="h-4 w-4" />
-            Smart Buy
+            {t("smartBuy")}
           </Button>
         </Link>
       </div>

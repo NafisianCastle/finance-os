@@ -1,6 +1,30 @@
 export const DEFAULT_CURRENCY = "BDT";
 export const DEFAULT_LOCALE = "bn-BD";
 
+export const SUPPORTED_CURRENCIES = [
+  { code: "BDT", label: "Bangladeshi Taka (৳)" },
+  { code: "USD", label: "US Dollar ($)" },
+  { code: "EUR", label: "Euro (€)" },
+  { code: "GBP", label: "British Pound (£)" },
+  { code: "INR", label: "Indian Rupee (₹)" },
+  { code: "JPY", label: "Japanese Yen (¥)" },
+  { code: "AUD", label: "Australian Dollar" },
+  { code: "CAD", label: "Canadian Dollar" },
+  { code: "SGD", label: "Singapore Dollar" },
+  { code: "AED", label: "UAE Dirham" },
+  { code: "SAR", label: "Saudi Riyal" },
+  { code: "MYR", label: "Malaysian Ringgit" },
+  { code: "PKR", label: "Pakistani Rupee" },
+  { code: "LKR", label: "Sri Lankan Rupee" },
+  { code: "NPR", label: "Nepalese Rupee" },
+  { code: "CNY", label: "Chinese Yuan" },
+] as const;
+
+export const SUPPORTED_UI_LOCALES = [
+  { code: "en", label: "English" },
+  { code: "bn", label: "বাংলা" },
+] as const;
+
 export const ACCOUNT_TYPES = {
   CASH: 1,
   BANK: 2,

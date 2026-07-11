@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { v4 as uuid } from "uuid";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { formatMoney, bdtToPoisha } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import type { Debt, Account } from "@/infrastructure/db/dexie/schema";
 import { DEBT_STATUS } from "@/lib/constants";
 import { enqueueSync } from "@/infrastructure/sync/sync-queue";
@@ -18,17 +19,22 @@ import { repayDebt } from "@/application/debts";
 import { useToast } from "@/components/ui/toast";
 import { AlertTriangle } from "lucide-react";
 
-function debtPressureLevel(debtToIncomePct: number): {
+function debtPressureLevel(
+  debtToIncomePct: number,
+  t: (key: string) => string
+): {
   label: string;
   color: string;
   bg: string;
 } {
-  if (debtToIncomePct < 20) return { label: "Healthy", color: "text-primary", bg: "bg-primary/10" };
-  if (debtToIncomePct < 40) return { label: "Moderate", color: "text-yellow-600", bg: "bg-yellow-500/10" };
-  return { label: "High pressure", color: "text-destructive", bg: "bg-destructive/10" };
+  if (debtToIncomePct < 20) return { label: t("healthy"), color: "text-primary", bg: "bg-primary/10" };
+  if (debtToIncomePct < 40) return { label: t("moderate"), color: "text-yellow-600", bg: "bg-yellow-500/10" };
+  return { label: t("highPressure"), color: "text-destructive", bg: "bg-destructive/10" };
 }
 
 export default function DebtPage() {
+  const t = useTranslations("Debt");
+  const { format, toMinor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
   const { toast } = useToast();
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -63,18 +69,18 @@ export default function DebtPage() {
 
   async function submitRepay(debt: Debt) {
     if (!userId || !repayAccountId) return;
-    const poisha = bdtToPoisha(parseFloat(repayAmount) || 0);
+    const poisha = toMinor(parseFloat(repayAmount) || 0);
     if (poisha <= 0) return;
     await repayDebt(userId, debt, poisha, repayAccountId);
     setRepayingId(null);
     setRepayAmount("");
-    toast("Repayment recorded.", "success");
+    toast(t("repaymentRecorded"), "success");
     load();
   }
 
   async function addDebt() {
     if (!userId) return;
-    const poisha = bdtToPoisha(parseFloat(amount) || 0);
+    const poisha = toMinor(parseFloat(amount) || 0);
     const now = new Date().toISOString();
     const d: Debt = {
       id: uuid(),
@@ -111,7 +117,7 @@ export default function DebtPage() {
 
   const annualIncome = monthlyIncome * 12;
   const debtToIncomePct = annualIncome > 0 ? (totalRemaining / annualIncome) * 100 : 0;
-  const pressure = debtPressureLevel(debtToIncomePct);
+  const pressure = debtPressureLevel(debtToIncomePct, t);
 
   const estimatedMonthlyBurden = activeDebts.reduce((s, d) => {
     if (!d.dueDate) return s;
@@ -125,36 +131,36 @@ export default function DebtPage() {
   }, 0);
 
   return (
-    <AppShell title="Debt">
+    <AppShell title={t("title")}>
       <div className="space-y-4">
         {/* Pressure analysis summary */}
         {activeDebts.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Debt pressure</CardTitle>
+              <CardTitle className="text-base">{t("debtPressure")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className={`rounded-lg px-3 py-2 ${pressure.bg}`}>
                 <p className={`text-sm font-semibold ${pressure.color}`}>{pressure.label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Debt is {debtToIncomePct.toFixed(1)}% of annual income
+                  {t("debtPercentOfIncome", { percent: debtToIncomePct.toFixed(1) })}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-md bg-muted p-2">
-                  <p className="text-muted-foreground">Total owed</p>
-                  <p className="font-semibold text-destructive">{formatMoney(totalRemaining)}</p>
+                  <p className="text-muted-foreground">{t("totalOwed")}</p>
+                  <p className="font-semibold text-destructive">{format(totalRemaining)}</p>
                 </div>
                 <div className="rounded-md bg-muted p-2">
-                  <p className="text-muted-foreground">Est. monthly burden</p>
-                  <p className="font-semibold">{formatMoney(estimatedMonthlyBurden)}</p>
+                  <p className="text-muted-foreground">{t("estMonthlyBurden")}</p>
+                  <p className="font-semibold">{format(estimatedMonthlyBurden)}</p>
                 </div>
               </div>
               {overdueDebts.length > 0 && (
                 <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs">
                   <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
                   <span className="text-destructive font-medium">
-                    {overdueDebts.length} debt{overdueDebts.length > 1 ? "s" : ""} overdue
+                    {t("debtsOverdue", { count: overdueDebts.length })}
                   </span>
                 </div>
               )}
@@ -165,33 +171,33 @@ export default function DebtPage() {
         {/* Add debt form */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Add debt</CardTitle>
+            <CardTitle className="text-base">{t("addDebt")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
-              <Label>Lender</Label>
+              <Label>{t("lender")}</Label>
               <Input value={lender} onChange={(e) => setLender(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
-                <Label>Amount (BDT)</Label>
+                <Label>{t("amountLabel", { currency: currencyCode })}</Label>
                 <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Interest rate %</Label>
+                <Label>{t("interestRate")}</Label>
                 <Input
                   type="number"
                   value={interestRate}
                   onChange={(e) => setInterestRate(e.target.value)}
-                  placeholder="Optional"
+                  placeholder={t("optional")}
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Due date (optional)</Label>
+              <Label>{t("dueDateOptional")}</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
-            <Button onClick={addDebt} className="w-full">Add debt</Button>
+            <Button onClick={addDebt} className="w-full">{t("addDebt")}</Button>
           </CardContent>
         </Card>
 
@@ -206,27 +212,27 @@ export default function DebtPage() {
                     <p className="font-medium">{d.lender}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {isOverdue ? (
-                        <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                        <Badge variant="destructive" className="text-xs">{t("overdue")}</Badge>
                       ) : d.status === DEBT_STATUS.PAID ? (
-                        <Badge variant="secondary" className="text-xs">Paid</Badge>
+                        <Badge variant="secondary" className="text-xs">{t("paid")}</Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs">Active</Badge>
+                        <Badge variant="outline" className="text-xs">{t("active")}</Badge>
                       )}
                       {d.dueDate && (
-                        <p className="text-xs text-muted-foreground">Due {d.dueDate}</p>
+                        <p className="text-xs text-muted-foreground">{t("dueOn", { date: d.dueDate })}</p>
                       )}
                       {d.interestRate != null && (
-                        <p className="text-xs text-muted-foreground">{d.interestRate}% p.a.</p>
+                        <p className="text-xs text-muted-foreground">{t("interestRatePerAnnum", { rate: d.interestRate })}</p>
                       )}
                     </div>
                   </div>
-                  <p className="font-semibold text-destructive">{formatMoney(d.remainingPoisha)}</p>
+                  <p className="font-semibold text-destructive">{format(d.remainingPoisha)}</p>
                 </div>
                 {d.status !== DEBT_STATUS.PAID && (
                   repayingId === d.id ? (
                     <div className="space-y-2 border-t pt-3">
                       <div className="space-y-2">
-                        <Label>Amount paid (BDT)</Label>
+                        <Label>{t("amountPaidLabel", { currency: currencyCode })}</Label>
                         <Input
                           type="number"
                           value={repayAmount}
@@ -234,7 +240,7 @@ export default function DebtPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Pay from</Label>
+                        <Label>{t("payFrom")}</Label>
                         <select
                           className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
                           value={repayAccountId}
@@ -246,15 +252,15 @@ export default function DebtPage() {
                         </select>
                       </div>
                       <div className="flex gap-2">
-                        <Button onClick={() => submitRepay(d)} className="flex-1">Confirm</Button>
+                        <Button onClick={() => submitRepay(d)} className="flex-1">{t("confirm")}</Button>
                         <Button variant="outline" onClick={() => setRepayingId(null)} className="flex-1">
-                          Cancel
+                          {t("cancel")}
                         </Button>
                       </div>
                     </div>
                   ) : (
                     <Button variant="outline" size="sm" onClick={() => startRepay(d)}>
-                      Record repayment
+                      {t("recordRepayment")}
                     </Button>
                   )
                 )}

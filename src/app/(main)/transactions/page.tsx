@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -10,11 +11,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import type { Transaction } from "@/infrastructure/db/dexie/schema";
-import { formatMoney } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { TX_TYPES } from "@/lib/constants";
 import { Plus, Receipt } from "lucide-react";
 
 export default function TransactionsPage() {
+  const t = useTranslations("Transactions");
+  const { format } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
   const [txs, setTxs] = useState<Transaction[] | null>(null);
 
@@ -29,12 +32,12 @@ export default function TransactionsPage() {
   }, [userId]);
 
   return (
-    <AppShell title="Activity">
+    <AppShell title={t("title")}>
       <div className="space-y-3">
         <Link href="/transactions/new" className="block">
           <Button className="w-full">
             <Plus className="h-4 w-4" />
-            Add transaction
+            {t("addTransaction")}
           </Button>
         </Link>
         {txs === null ? (
@@ -46,8 +49,8 @@ export default function TransactionsPage() {
         ) : txs.length === 0 ? (
           <EmptyState
             icon={Receipt}
-            title="No transactions yet"
-            description="Add your first income or expense to start tracking."
+            title={t("emptyTitle")}
+            description={t("emptyDescription")}
           />
         ) : (
           txs.slice(0, 50).map((tx) => (
@@ -63,7 +66,7 @@ export default function TransactionsPage() {
                   }
                 >
                   {tx.type === TX_TYPES.INCOME ? "+" : "-"}
-                  {formatMoney(tx.amountPoisha)}
+                  {format(tx.amountPoisha)}
                 </span>
               </CardContent>
             </Card>

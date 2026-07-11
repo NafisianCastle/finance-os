@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -23,33 +30,39 @@ import {
   repairAccountSync,
   repairLocalBudgets,
 } from "@/infrastructure/sync/sync-queue";
-import { bdtToPoisha, poishaToBdt } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { useAppStore } from "@/store/app-store";
 import type { Account } from "@/infrastructure/db/dexie/schema";
-import { ACCOUNT_TYPES } from "@/lib/constants";
+import { ACCOUNT_TYPES, SUPPORTED_CURRENCIES, SUPPORTED_UI_LOCALES } from "@/lib/constants";
 import { Loader2, Moon, Sun, Plus, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
 
-const ACCOUNT_TYPE_OPTIONS = [
-  { v: ACCOUNT_TYPES.CASH, l: "Cash" },
-  { v: ACCOUNT_TYPES.BANK, l: "Bank" },
-  { v: ACCOUNT_TYPES.WALLET, l: "Mobile wallet" },
-  { v: ACCOUNT_TYPES.CREDIT_CARD, l: "Credit card" },
-];
-
 export default function SettingsPage() {
+  const t = useTranslations("Settings");
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
   const setUserId = useAppStore((s) => s.setUserId);
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const confirm = useConfirm();
+  const { currencyCode, locale, toMinor, toMajor } = useCurrencyFormatter();
+
+  const ACCOUNT_TYPE_OPTIONS = [
+    { v: ACCOUNT_TYPES.CASH, l: t("accountTypeCash") },
+    { v: ACCOUNT_TYPES.BANK, l: t("accountTypeBank") },
+    { v: ACCOUNT_TYPES.WALLET, l: t("accountTypeWallet") },
+    { v: ACCOUNT_TYPES.CREDIT_CARD, l: t("accountTypeCreditCard") },
+  ];
 
   const [income, setIncome] = useState("");
   const [savingIncome, setSavingIncome] = useState(false);
+  const [savingCurrency, setSavingCurrency] = useState(false);
+  const [uiLocale, setUiLocale] = useState(locale.split("-")[0]);
+  const [currency, setCurrency] = useState(currencyCode);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
   const [email, setEmail] = useState<string | null>(null);
@@ -65,15 +78,20 @@ export default function SettingsPage() {
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
 
   useEffect(() => {
+    setCurrency(currencyCode);
+    setUiLocale(locale.split("-")[0]);
+  }, [currencyCode, locale]);
+
+  useEffect(() => {
     if (!userId) return;
     getDb()
       .userProfiles.where("userId")
       .equals(userId)
       .first()
       .then((p) => {
-        if (p) setIncome(String(p.monthlyIncomePoisha / 100));
+        if (p) setIncome(String(toMajor(p.monthlyIncomePoisha)));
       });
-  }, [userId]);
+  }, [userId, toMajor]);
 
   useEffect(() => {
     if (!userId) return;
@@ -85,10 +103,10 @@ export default function SettingsPage() {
       .then((accs) => {
         setAccounts(accs);
         setBalanceInputs(
-          Object.fromEntries(accs.map((a) => [a.id, String(poishaToBdt(a.balancePoisha))])),
+          Object.fromEntries(accs.map((a) => [a.id, String(toMajor(a.balancePoisha))])),
         );
       });
-  }, [userId]);
+  }, [userId, toMajor]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -101,13 +119,13 @@ export default function SettingsPage() {
 
   async function saveAccountBalance(acc: Account) {
     if (!userId) return;
-    const bdt = parseFloat(balanceInputs[acc.id]);
-    if (Number.isNaN(bdt) || bdt < 0) {
-      toast("Enter a valid, non-negative amount.", "error");
+    const amount = parseFloat(balanceInputs[acc.id]);
+    if (Number.isNaN(amount) || amount < 0) {
+      toast(t("invalidAmount"), "error");
       return;
     }
     setSavingAccountId(acc.id);
-    const balancePoisha = bdtToPoisha(bdt);
+    const balancePoisha = toMinor(amount);
     const now = new Date().toISOString();
     await getDb().accounts.update(acc.id, { balancePoisha, updatedAt: now });
     await enqueueSync("accounts", acc.id, "upsert", {
@@ -118,14 +136,14 @@ export default function SettingsPage() {
     });
     setAccounts((prev) => prev?.map((a) => (a.id === acc.id ? { ...a, balancePoisha } : a)) ?? prev);
     setSavingAccountId(null);
-    toast(`${acc.name} balance updated.`, "success");
+    toast(t("balanceUpdated", { name: acc.name }), "success");
   }
 
   async function handleCreateAccount() {
     if (!userId || !newAccountName.trim()) return;
-    const bdt = parseFloat(newAccountBalance) || 0;
-    if (bdt < 0) {
-      toast("Enter a valid, non-negative amount.", "error");
+    const amount = parseFloat(newAccountBalance) || 0;
+    if (amount < 0) {
+      toast(t("invalidAmount"), "error");
       return;
     }
     setCreatingAccount(true);
@@ -135,7 +153,7 @@ export default function SettingsPage() {
       userId,
       type: newAccountType,
       name: newAccountName.trim(),
-      balancePoisha: bdtToPoisha(bdt),
+      balancePoisha: toMinor(amount),
       createdAt: now,
       updatedAt: now,
     };
@@ -147,19 +165,19 @@ export default function SettingsPage() {
       balance_poisha: acc.balancePoisha,
     });
     setAccounts((prev) => [...(prev ?? []), acc]);
-    setBalanceInputs((prev) => ({ ...prev, [acc.id]: String(poishaToBdt(acc.balancePoisha)) }));
+    setBalanceInputs((prev) => ({ ...prev, [acc.id]: String(toMajor(acc.balancePoisha)) }));
     setNewAccountName("");
     setNewAccountBalance("");
     setCreatingAccount(false);
-    toast(`${acc.name} added.`, "success");
+    toast(t("accountAdded", { name: acc.name }), "success");
   }
 
   async function handleDeleteAccount(acc: Account) {
     if (!userId) return;
     const ok = await confirm({
-      title: `Remove ${acc.name}?`,
-      description: "Past transactions on this account are kept, but it won't be selectable anymore.",
-      confirmLabel: "Remove",
+      title: t("removeAccountTitle", { name: acc.name }),
+      description: t("removeAccountDescription"),
+      confirmLabel: t("remove"),
       variant: "destructive",
     });
     if (!ok) return;
@@ -169,14 +187,14 @@ export default function SettingsPage() {
     await enqueueSync("accounts", acc.id, "delete", { id: acc.id });
     setAccounts((prev) => prev?.filter((a) => a.id !== acc.id) ?? prev);
     setDeletingAccountId(null);
-    toast(`${acc.name} removed.`, "success");
+    toast(t("accountRemoved", { name: acc.name }), "success");
   }
 
   async function saveProfile() {
     if (!userId) return;
-    const bdt = parseFloat(income);
-    if (Number.isNaN(bdt) || bdt < 0) {
-      toast("Enter a valid, non-negative income.", "error");
+    const amount = parseFloat(income);
+    if (Number.isNaN(amount) || amount < 0) {
+      toast(t("invalidIncome"), "error");
       return;
     }
     setSavingIncome(true);
@@ -190,11 +208,39 @@ export default function SettingsPage() {
     }
     const now = new Date().toISOString();
     await getDb().userProfiles.update(profile.id, {
-      monthlyIncomePoisha: bdtToPoisha(bdt),
+      monthlyIncomePoisha: toMinor(amount),
       updatedAt: now,
     });
     setSavingIncome(false);
-    toast("Monthly income saved.", "success");
+    toast(t("incomeSaved"), "success");
+  }
+
+  async function saveCurrencyAndLocale() {
+    if (!userId) return;
+    setSavingCurrency(true);
+    const profile = await getDb()
+      .userProfiles.where("userId")
+      .equals(userId)
+      .first();
+    if (!profile) {
+      setSavingCurrency(false);
+      return;
+    }
+    const now = new Date().toISOString();
+    await getDb().userProfiles.update(profile.id, {
+      currencyCode: currency,
+      locale: uiLocale,
+      updatedAt: now,
+    });
+    await enqueueSync("user_profiles", profile.id, "upsert", {
+      id: profile.id,
+      currency_code: currency,
+      locale: uiLocale,
+    });
+    document.cookie = `NEXT_LOCALE=${uiLocale}; path=/; max-age=31536000`;
+    setSavingCurrency(false);
+    toast(t("currencySaved"), "success");
+    router.refresh();
   }
 
   async function handleSync() {
@@ -202,7 +248,10 @@ export default function SettingsPage() {
     setSyncing(true);
     await repairAccountSync(userId);
     const { pushed, errors, lastError } = await processSyncQueue(userId);
-    const msg = `Synced ${pushed} items${errors ? `, ${errors} errors${lastError ? `: ${lastError}` : ""}` : ""}`;
+    const msg =
+      errors > 0
+        ? t("syncResultWithErrors", { pushed, errors, lastError: lastError ?? "" })
+        : t("syncResultOk", { pushed });
     setSyncMsg(msg);
     setSyncing(false);
     toast(msg, errors ? "error" : "success");
@@ -211,10 +260,9 @@ export default function SettingsPage() {
   async function handleFixDuplicates() {
     if (!userId) return;
     const ok = await confirm({
-      title: "Fix duplicates?",
-      description:
-        "Merges accounts and goals with the same name (summing their balances/saved amounts) and refreshes budgets from the server. This changes remote data immediately and can't be undone.",
-      confirmLabel: "Fix",
+      title: t("fixDuplicatesTitle"),
+      description: t("fixDuplicatesDescription"),
+      confirmLabel: t("fix"),
       variant: "destructive",
     });
     if (!ok) return;
@@ -224,12 +272,12 @@ export default function SettingsPage() {
     await repairLocalBudgets(userId);
     setSyncing(false);
     const parts: string[] = [];
-    if (accountGroups > 0) parts.push(`${mergedAccounts} account(s)`);
-    if (goalGroups > 0) parts.push(`${mergedGoals} goal(s)`);
+    if (accountGroups > 0) parts.push(t("mergedAccountsCount", { count: mergedAccounts }));
+    if (goalGroups > 0) parts.push(t("mergedGoalsCount", { count: mergedGoals }));
     toast(
       parts.length > 0
-        ? `Fixed duplicates: merged ${parts.join(", ")}, budgets refreshed.`
-        : "No duplicates found. Budgets refreshed.",
+        ? t("fixedDuplicates", { parts: parts.join(", ") })
+        : t("noDuplicatesFound"),
       "success"
     );
   }
@@ -240,7 +288,9 @@ export default function SettingsPage() {
     const { pushed, errors, pulled } = await forceFullResync(userId);
     setSyncing(false);
     toast(
-      `Re-synced: pushed ${pushed}, pulled ${pulled}${errors ? `, ${errors} errors` : ""}.`,
+      errors > 0
+        ? t("resyncResultWithErrors", { pushed, pulled, errors })
+        : t("resyncResultOk", { pushed, pulled }),
       errors ? "error" : "success"
     );
   }
@@ -255,7 +305,7 @@ export default function SettingsPage() {
     a.download = `finance-os-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast("Backup downloaded.", "success");
+    toast(t("backupDownloaded"), "success");
   }
 
   async function handleChangePassword() {
@@ -269,16 +319,16 @@ export default function SettingsPage() {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     setResettingPassword(false);
     toast(
-      error ? `Failed to send reset email: ${error.message}` : "Password reset email sent.",
+      error ? t("resetEmailFailed", { message: error.message }) : t("resetEmailSent"),
       error ? "error" : "success",
     );
   }
 
   async function handleRepairDatabase() {
     const ok = await confirm({
-      title: "Fix database errors?",
-      description: "This clears all local Finance OS data and returns you to onboarding. This can't be undone.",
-      confirmLabel: "Clear data",
+      title: t("repairTitle"),
+      description: t("repairDescription"),
+      confirmLabel: t("clearData"),
       variant: "destructive",
     });
     if (!ok) return;
@@ -290,11 +340,11 @@ export default function SettingsPage() {
 
   async function handleLogout() {
     const ok = await confirm({
-      title: "Log out?",
+      title: t("logoutTitle"),
       description: isSupabaseConfigured()
-        ? "You'll need to sign in again to sync your data."
-        : "This clears your local session.",
-      confirmLabel: "Log out",
+        ? t("logoutDescriptionCloud")
+        : t("logoutDescriptionLocal"),
+      confirmLabel: t("logout"),
       variant: "destructive",
     });
     if (!ok) return;
@@ -314,12 +364,12 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell title="Settings">
+    <AppShell title={t("title")}>
       <div className="space-y-4">
         <Card>
           <CardContent className="pt-4 space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="income">Monthly income (BDT)</Label>
+              <Label htmlFor="income">{t("monthlyIncome", { currency: currencyCode })}</Label>
               <Input
                 id="income"
                 type="number"
@@ -335,17 +385,16 @@ export default function SettingsPage() {
               disabled={savingIncome}
             >
               {savingIncome && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save income
+              {t("saveIncome")}
             </Button>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="pt-4 space-y-3">
-            <p className="text-sm font-medium">Account balances</p>
+            <p className="text-sm font-medium">{t("accountBalances")}</p>
             <p className="text-sm text-muted-foreground">
-              Set these to what you actually have — they start at ৳0 and
-              aren&apos;t filled in from your income automatically.
+              {t("accountBalancesDescription")}
             </p>
             {accounts === null ? (
               <div className="space-y-2">
@@ -373,12 +422,12 @@ export default function SettingsPage() {
                     disabled={savingAccountId === acc.id}
                   >
                     {savingAccountId === acc.id && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Save
+                    {t("save")}
                   </Button>
                   <Button
                     variant="outline"
                     size="icon"
-                    aria-label={`Remove ${acc.name}`}
+                    aria-label={t("removeAria", { name: acc.name })}
                     onClick={() => handleDeleteAccount(acc)}
                     disabled={deletingAccountId === acc.id}
                   >
@@ -393,10 +442,10 @@ export default function SettingsPage() {
             )}
 
             <div className="border-t border-border pt-3 space-y-2">
-              <Label>Add account</Label>
+              <Label>{t("addAccount")}</Label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="e.g. bKash, City Bank"
+                  placeholder={t("addAccountPlaceholder")}
                   value={newAccountName}
                   onChange={(e) => setNewAccountName(e.target.value)}
                   className="flex-1"
@@ -406,8 +455,8 @@ export default function SettingsPage() {
                   value={newAccountType}
                   onChange={(e) => setNewAccountType(Number(e.target.value))}
                 >
-                  {ACCOUNT_TYPE_OPTIONS.map((t) => (
-                    <option key={t.v} value={t.v}>{t.l}</option>
+                  {ACCOUNT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.v} value={opt.v}>{opt.l}</option>
                   ))}
                 </select>
               </div>
@@ -415,7 +464,7 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   min={0}
-                  placeholder="Starting balance (BDT)"
+                  placeholder={t("startingBalance", { currency: currencyCode })}
                   value={newAccountBalance}
                   onChange={(e) => setNewAccountBalance(e.target.value)}
                   className="flex-1"
@@ -427,7 +476,7 @@ export default function SettingsPage() {
                   disabled={creatingAccount || !newAccountName.trim()}
                 >
                   {creatingAccount ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Add
+                  {t("add")}
                 </Button>
               </div>
             </div>
@@ -436,15 +485,47 @@ export default function SettingsPage() {
 
         <Card>
           <CardContent className="pt-4 space-y-3">
-            <p className="text-sm font-medium">Currency</p>
+            <p className="text-sm font-medium">{t("currency")}</p>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <p className="text-sm font-medium mt-2">{t("language")}</p>
+            <Select value={uiLocale} onValueChange={setUiLocale}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SUPPORTED_UI_LOCALES.map((l) => (
+                  <SelectItem key={l.code} value={l.code}>
+                    {l.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button
+              onClick={saveCurrencyAndLocale}
+              variant="secondary"
+              className="w-full"
+              disabled={savingCurrency}
+            >
+              {savingCurrency && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t("saveCurrencyLanguage")}
+            </Button>
+
+            <p className="text-sm font-medium mt-2">{t("cloudSync")}</p>
             <p className="text-sm text-muted-foreground">
-              BDT (৳) — default for Bangladesh
-            </p>
-            <p className="text-sm font-medium mt-2">Cloud sync</p>
-            <p className="text-sm text-muted-foreground">
-              {isSupabaseConfigured()
-                ? "Supabase configured — tap sync to push pending changes."
-                : "Offline mode — add NEXT_PUBLIC_SUPABASE_URL and ANON_KEY to .env.local"}
+              {isSupabaseConfigured() ? t("cloudSyncConfigured") : t("cloudSyncOffline")}
             </p>
             {isSupabaseConfigured() && (
               <Button
@@ -453,7 +534,7 @@ export default function SettingsPage() {
                 className="w-full"
               >
                 {syncing && <Loader2 className="h-4 w-4 animate-spin" />}
-                {syncing ? "Syncing…" : "Sync now"}
+                {syncing ? t("syncing") : t("syncNow")}
               </Button>
             )}
             {syncMsg && (
@@ -461,10 +542,9 @@ export default function SettingsPage() {
             )}
             {isSupabaseConfigured() && (
               <>
-                <p className="text-sm font-medium mt-2">Duplicates</p>
+                <p className="text-sm font-medium mt-2">{t("duplicates")}</p>
                 <p className="text-sm text-muted-foreground">
-                  If accounts, budgets, or goals show up twice after using
-                  multiple browsers, fix them all in one go.
+                  {t("duplicatesDescription")}
                 </p>
                 <Button
                   onClick={handleFixDuplicates}
@@ -472,7 +552,7 @@ export default function SettingsPage() {
                   variant="outline"
                   className="w-full"
                 >
-                  Fix duplicates
+                  {t("fixDuplicates")}
                 </Button>
               </>
             )}
@@ -481,13 +561,12 @@ export default function SettingsPage() {
 
         <Card>
           <CardContent className="pt-4 space-y-3">
-            <p className="text-sm font-medium">Diagnostics</p>
+            <p className="text-sm font-medium">{t("diagnostics")}</p>
             <p className="text-sm text-muted-foreground">
-              Your data is never trapped even if sync breaks. Download a full
-              backup any time, or force a full re-sync against the server.
+              {t("diagnosticsDescription")}
             </p>
             <Button onClick={handleExportData} variant="outline" className="w-full">
-              Export data as JSON
+              {t("exportData")}
             </Button>
             {isSupabaseConfigured() && (
               <Button
@@ -496,7 +575,7 @@ export default function SettingsPage() {
                 variant="outline"
                 className="w-full"
               >
-                Force full re-sync
+                {t("forceResync")}
               </Button>
             )}
           </CardContent>
@@ -505,9 +584,9 @@ export default function SettingsPage() {
         {isSupabaseConfigured() && (
           <Card>
             <CardContent className="pt-4 space-y-3">
-              <p className="text-sm font-medium">Manage account</p>
+              <p className="text-sm font-medium">{t("manageAccount")}</p>
               <p className="text-sm text-muted-foreground">
-                {email ?? "Not signed in"}
+                {email ?? t("notSignedIn")}
               </p>
               <Button
                 variant="outline"
@@ -516,7 +595,7 @@ export default function SettingsPage() {
                 disabled={!email || resettingPassword}
               >
                 {resettingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
-                Change password
+                {t("changePassword")}
               </Button>
             </CardContent>
           </Card>
@@ -524,12 +603,12 @@ export default function SettingsPage() {
 
         <Card>
           <CardContent className="pt-4 flex items-center justify-between">
-            <span className="font-medium">Theme</span>
+            <span className="font-medium">{t("theme")}</span>
             <Button
               variant="outline"
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              aria-label="Toggle theme"
+              aria-label={t("toggleTheme")}
             >
               {theme === "dark" ? (
                 <Sun className="h-4 w-4" />
@@ -547,11 +626,11 @@ export default function SettingsPage() {
           disabled={repairing}
         >
           {repairing && <Loader2 className="h-4 w-4 animate-spin" />}
-          Repair local database
+          {t("repairDatabase")}
         </Button>
 
         <Button variant="destructive" className="w-full" onClick={handleLogout}>
-          Log out
+          {t("logout")}
         </Button>
       </div>
     </AppShell>
