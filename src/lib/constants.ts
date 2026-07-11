@@ -42,6 +42,11 @@ export const LOAN_STATUS = { ACTIVE: 1, OVERDUE: 2, RECOVERED: 3 } as const;
 
 export const SYNC_BATCH_SIZE = 100;
 export const MAX_SYNC_BUY_EVALS = 20;
+// Initial hydration on a new device only pulls transactions from this many
+// days back, so first sync stays fast; older months are pulled on demand
+// via pullHistoricalTransactions.
+export const SYNC_WINDOW_DAYS = 180;
+export const HISTORICAL_PULL_BATCH_SIZE = 500;
 
 export const SYSTEM_CATEGORIES = [
   { id: "food", name: "Food", icon: "utensils" },

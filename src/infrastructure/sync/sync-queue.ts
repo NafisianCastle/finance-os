@@ -1,5 +1,10 @@
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { MAX_SYNC_BUY_EVALS, SYNC_BATCH_SIZE } from "@/lib/constants";
+import {
+  HISTORICAL_PULL_BATCH_SIZE,
+  MAX_SYNC_BUY_EVALS,
+  SYNC_BATCH_SIZE,
+  SYNC_WINDOW_DAYS,
+} from "@/lib/constants";
 import { createClient } from "@/infrastructure/supabase/client";
 import type { BuyEvaluation } from "@/infrastructure/db/dexie/schema";
 
@@ -349,15 +354,30 @@ export async function pullRemoteChanges(
 
   const db = getDb();
   let count = 0;
+  const isInitialHydration = lastSyncedAt === null;
   const since = lastSyncedAt ?? "1970-01-01T00:00:00Z";
+  const windowCutoff = new Date(
+    Date.now() - SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  )
+    .toISOString()
+    .slice(0, 10);
 
   for (const [table, mapper] of Object.entries(REMOTE_MAPPERS)) {
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
       .select("*")
       .eq("user_id", userId)
       .gt("updated_at", since)
       .limit(SYNC_BATCH_SIZE);
+
+    // New-device hydration: keep transactions to a recent rolling window so
+    // the first sync stays fast; older months load lazily on demand (see
+    // pullHistoricalTransactions).
+    if (isInitialHydration && table === "transactions") {
+      query = query.gte("tx_date", windowCutoff);
+    }
+
+    const { data, error } = await query;
 
     if (error || !data) continue;
 
@@ -380,6 +400,59 @@ export async function pullRemoteChanges(
   }
 
   return count;
+}
+
+/**
+ * Lazily pulls transactions older than `beforeDate` (default: the sync
+ * window cutoff used by pullRemoteChanges), one page at a time. Call when
+ * the user browses further back than the initial hydration window covers
+ * (e.g. paging into older reports). Returns the count pulled and the oldest
+ * tx_date seen, so the caller can request the next older page.
+ */
+export async function pullHistoricalTransactions(
+  userId: string,
+  beforeDate?: string
+): Promise<{ count: number; oldestDate: string | null }> {
+  const supabase = createClient();
+  if (!supabase) return { count: 0, oldestDate: null };
+
+  const db = getDb();
+  const cutoff =
+    beforeDate ??
+    new Date(Date.now() - SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("user_id", userId)
+    .lt("tx_date", cutoff)
+    .order("tx_date", { ascending: false })
+    .limit(HISTORICAL_PULL_BATCH_SIZE);
+
+  if (error || !data || data.length === 0) return { count: 0, oldestDate: null };
+
+  const mapper = REMOTE_MAPPERS.transactions;
+  const localTable = db.transactions;
+  let count = 0;
+  let oldestDate: string | null = null;
+
+  for (const remoteRow of data) {
+    const mapped = mapper(remoteRow) as {
+      id: string;
+      updatedAt: string;
+      date: string;
+    };
+    const existing = await localTable.get(mapped.id);
+    if (!existing || existing.updatedAt < mapped.updatedAt) {
+      await localTable.put(mapped as never);
+      count++;
+    }
+    if (!oldestDate || mapped.date < oldestDate) oldestDate = mapped.date;
+  }
+
+  return { count, oldestDate };
 }
 
 /**
