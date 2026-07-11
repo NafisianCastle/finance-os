@@ -119,7 +119,14 @@ export default function NewTransactionPage() {
 
         <div className="space-y-2">
           <Label>Amount (BDT)</Label>
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <Input
+            type="number"
+            inputMode="decimal"
+            autoFocus
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
         </div>
 
         <div className="space-y-2">

@@ -15,6 +15,8 @@ import {
 } from "@/infrastructure/supabase/client";
 import {
   enqueueSync,
+  exportUserDataAsJson,
+  forceFullResync,
   mergeDuplicateAccounts,
   processSyncQueue,
   repairAccountSync,
@@ -232,6 +234,30 @@ export default function SettingsPage() {
     await repairLocalBudgets(userId);
     setSyncing(false);
     toast("Budgets refreshed from the server.", "success");
+  }
+
+  async function handleForceResync() {
+    if (!userId) return;
+    setSyncing(true);
+    const { pushed, errors, pulled } = await forceFullResync(userId);
+    setSyncing(false);
+    toast(
+      `Re-synced: pushed ${pushed}, pulled ${pulled}${errors ? `, ${errors} errors` : ""}.`,
+      errors ? "error" : "success"
+    );
+  }
+
+  async function handleExportData() {
+    if (!userId) return;
+    const data = await exportUserDataAsJson(userId);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `finance-os-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast("Backup downloaded.", "success");
   }
 
   async function handleChangePassword() {
@@ -464,6 +490,29 @@ export default function SettingsPage() {
                   Repair budgets
                 </Button>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4 space-y-3">
+            <p className="text-sm font-medium">Diagnostics</p>
+            <p className="text-sm text-muted-foreground">
+              Your data is never trapped even if sync breaks. Download a full
+              backup any time, or force a full re-sync against the server.
+            </p>
+            <Button onClick={handleExportData} variant="outline" className="w-full">
+              Export data as JSON
+            </Button>
+            {isSupabaseConfigured() && (
+              <Button
+                onClick={handleForceResync}
+                disabled={syncing}
+                variant="outline"
+                className="w-full"
+              >
+                Force full re-sync
+              </Button>
             )}
           </CardContent>
         </Card>

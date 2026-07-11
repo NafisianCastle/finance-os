@@ -80,6 +80,11 @@ export async function repairAccountSync(userId: string) {
   }
 }
 
+// Cap per-request batch size — condenses dozens of queued mutations (e.g.
+// after a day offline) into a handful of HTTP round-trips instead of one
+// request per item, cutting network overhead and battery drain on reconnect.
+const SYNC_CHUNK_SIZE = 50;
+
 export async function processSyncQueue(
   userId: string
 ): Promise<{ pushed: number; errors: number; lastError?: string }> {
@@ -92,49 +97,59 @@ export async function processSyncQueue(
   let errors = 0;
   let lastError: string | undefined;
 
+  const syncable: typeof items = [];
   for (const item of items) {
-    const { table, operation, payload, recordId } = item;
-
     // System categories use slug ids ("food", "transport", ...) which can
     // never satisfy the remote categories table's uuid id column. Drop any
     // queued entries instead of retrying forever.
-    if (table === "categories") {
+    if (item.table === "categories") {
       if (item.id) await db.syncQueue.delete(item.id);
       continue;
     }
+    syncable.push(item);
+  }
 
-    const row = { ...payload, id: recordId, user_id: userId, updated_at: new Date().toISOString() };
+  // Group by table+operation — each group can be sent as one batched request.
+  const groups = new Map<string, typeof items>();
+  for (const item of syncable) {
+    const key = `${item.table}|${item.operation}`;
+    const list = groups.get(key) ?? [];
+    list.push(item);
+    groups.set(key, list);
+  }
 
-    if (operation === "delete") {
-      const { error } = await supabase
-        .from(table)
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", recordId)
-        .eq("user_id", userId);
+  for (const [key, groupItems] of groups) {
+    const [table, operation] = key.split("|") as [string, "upsert" | "delete"];
+
+    for (let i = 0; i < groupItems.length; i += SYNC_CHUNK_SIZE) {
+      const chunk = groupItems.slice(i, i + SYNC_CHUNK_SIZE);
+      const now = new Date().toISOString();
+
+      const { error } =
+        operation === "delete"
+          ? await supabase
+              .from(table)
+              .update({ deleted_at: now })
+              .in("id", chunk.map((c) => c.recordId))
+              .eq("user_id", userId)
+          : await (() => {
+              const rows = chunk.map((c) => ({ ...c.payload, id: c.recordId, user_id: userId, updated_at: now }));
+              const onConflict = UNIQUE_CONFLICT_TARGETS[table];
+              return onConflict
+                ? supabase.from(table).upsert(rows, { onConflict })
+                : supabase.from(table).upsert(rows);
+            })();
+
       if (error) {
-        errors++;
+        errors += chunk.length;
         lastError = error.message || error.code || error.details || "unknown error";
         console.error(
-          `Sync delete failed for ${table}/${recordId}: code=${error.code} message=${error.message} details=${error.details} hint=${error.hint}`,
+          `Batch sync ${operation} failed for ${table} (${chunk.length} items): code=${error.code} message=${error.message} details=${error.details} hint=${error.hint}`,
         );
       } else {
-        pushed++;
-        if (item.id) await db.syncQueue.delete(item.id);
-      }
-    } else {
-      const onConflict = UNIQUE_CONFLICT_TARGETS[table];
-      const { error } = onConflict
-        ? await supabase.from(table).upsert(row, { onConflict })
-        : await supabase.from(table).upsert(row);
-      if (error) {
-        errors++;
-        lastError = error.message || error.code || error.details || "unknown error";
-        console.error(
-          `Sync upsert failed for ${table}/${recordId}: code=${error.code} message=${error.message} details=${error.details} hint=${error.hint}`,
-        );
-      } else {
-        pushed++;
-        if (item.id) await db.syncQueue.delete(item.id);
+        pushed += chunk.length;
+        const localIds = chunk.map((c) => c.id).filter((id): id is string => !!id);
+        await db.syncQueue.bulkDelete(localIds);
       }
     }
   }
@@ -465,6 +480,51 @@ export async function repairLocalBudgets(userId: string): Promise<void> {
   await db.budgets.bulkDelete(local.map((b) => b.id));
   await db.syncQueue.filter((i) => i.table === "budgets").delete();
   await pullRemoteChanges(userId, null);
+}
+
+/**
+ * Escape hatch for a broken sync loop: forces a full push of anything
+ * queued, then a full pull ignoring the lastSyncedAt checkpoint, so the
+ * device fully reconciles against Supabase instead of trusting whatever
+ * partial state it's stuck in.
+ */
+export async function forceFullResync(
+  userId: string
+): Promise<{ pushed: number; errors: number; pulled: number }> {
+  const { pushed, errors } = await processSyncQueue(userId);
+  const pulled = await pullRemoteChanges(userId, null);
+  return { pushed, errors, pulled };
+}
+
+const EXPORTABLE_TABLES = [
+  "userProfiles",
+  "accounts",
+  "categories",
+  "transactions",
+  "budgets",
+  "debts",
+  "loansGiven",
+  "heldLiabilities",
+  "goals",
+  "investments",
+  "investmentEvents",
+  "buyEvaluations",
+] as const;
+
+/**
+ * Dumps every local table's rows for this user into a plain JSON object —
+ * the escape hatch if sync is broken: the user's full ledger is never
+ * trapped behind a working sync pipeline, they can always get it out.
+ */
+export async function exportUserDataAsJson(userId: string): Promise<Record<string, unknown[]>> {
+  const db = getDb();
+  const out: Record<string, unknown[]> = {};
+  for (const table of EXPORTABLE_TABLES) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = await (db as any)[table].where("userId").equals(userId).toArray();
+    out[table] = rows;
+  }
+  return out;
 }
 
 export async function pruneBuyEvaluations(userId: string) {
