@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { calculateNetWorth } from "@/domain/rules-engine/net-worth.rules";
-import { bdtToPoisha } from "@/lib/money";
+import { majorToMinorUnits } from "@/lib/money";
+
+function bdtToPoisha(amount: number): number {
+  return majorToMinorUnits(amount, "BDT");
+}
 
 describe("Net worth with held liabilities", () => {
   it("excludes held money from spendable wealth", () => {

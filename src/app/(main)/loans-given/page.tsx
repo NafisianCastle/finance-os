@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
+import { useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { formatMoney, bdtToPoisha } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import type { LoanGiven, Account } from "@/infrastructure/db/dexie/schema";
 import { LOAN_STATUS } from "@/lib/constants";
 import { enqueueSync } from "@/infrastructure/sync/sync-queue";
@@ -20,6 +21,8 @@ import { useToast } from "@/components/ui/toast";
 export default function LoansGivenPage() {
   const userId = useAppStore((s) => s.userId);
   const { toast } = useToast();
+  const t = useTranslations("LoansGiven");
+  const { format, toMinor, toMajor, currencyCode } = useCurrencyFormatter();
   const [loans, setLoans] = useState<LoanGiven[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [borrower, setBorrower] = useState("");
@@ -45,23 +48,23 @@ export default function LoansGivenPage() {
 
   function startRepay(loan: LoanGiven) {
     setRepayingId(loan.id);
-    setRepayAmount((loan.remainingPoisha / 100).toString());
+    setRepayAmount(toMajor(loan.remainingPoisha).toString());
   }
 
   async function submitRepay(loan: LoanGiven) {
     if (!userId || !repayAccountId) return;
-    const poisha = bdtToPoisha(parseFloat(repayAmount) || 0);
+    const poisha = toMinor(parseFloat(repayAmount) || 0);
     if (poisha <= 0) return;
     await recoverLoanGiven(userId, loan, poisha, repayAccountId);
     setRepayingId(null);
     setRepayAmount("");
-    toast("Repayment recorded.", "success");
+    toast(t("repaymentRecorded"), "success");
     load();
   }
 
   async function addLoan() {
     if (!userId) return;
-    const poisha = bdtToPoisha(parseFloat(amount) || 0);
+    const poisha = toMinor(parseFloat(amount) || 0);
     const now = new Date().toISOString();
     const l: LoanGiven = {
       id: uuid(),
@@ -88,22 +91,26 @@ export default function LoansGivenPage() {
     load();
   }
 
-  const statusLabel: Record<number, string> = { 1: "Active", 2: "Overdue", 3: "Recovered" };
+  const statusLabel: Record<number, string> = {
+    1: t("statusActive"),
+    2: t("statusOverdue"),
+    3: t("statusRecovered"),
+  };
 
   return (
-    <AppShell title="Loans given">
+    <AppShell title={t("title")}>
       <div className="space-y-4">
         <Card>
           <CardContent className="pt-4 space-y-3">
             <div className="space-y-2">
-              <Label>Borrower</Label>
+              <Label>{t("borrower")}</Label>
               <Input value={borrower} onChange={(e) => setBorrower(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Amount (BDT)</Label>
+              <Label>{t("amountLabel", { currency: currencyCode })}</Label>
               <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
-            <Button onClick={addLoan} className="w-full">Add loan</Button>
+            <Button onClick={addLoan} className="w-full">{t("addLoan")}</Button>
           </CardContent>
         </Card>
         {loans.map((l) => (
@@ -114,13 +121,13 @@ export default function LoansGivenPage() {
                   <p className="font-medium">{l.borrower}</p>
                   <Badge variant="outline" className="mt-1">{statusLabel[l.status]}</Badge>
                 </div>
-                <p className="font-semibold text-primary">{formatMoney(l.remainingPoisha)}</p>
+                <p className="font-semibold text-primary">{format(l.remainingPoisha)}</p>
               </div>
               {l.status !== LOAN_STATUS.RECOVERED && (
                 repayingId === l.id ? (
                   <div className="space-y-2 border-t pt-3">
                     <div className="space-y-2">
-                      <Label>Amount received (BDT)</Label>
+                      <Label>{t("amountReceivedLabel", { currency: currencyCode })}</Label>
                       <Input
                         type="number"
                         value={repayAmount}
@@ -128,7 +135,7 @@ export default function LoansGivenPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Deposit into</Label>
+                      <Label>{t("depositInto")}</Label>
                       <select
                         className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
                         value={repayAccountId}
@@ -140,15 +147,15 @@ export default function LoansGivenPage() {
                       </select>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={() => submitRepay(l)} className="flex-1">Confirm</Button>
+                      <Button onClick={() => submitRepay(l)} className="flex-1">{t("confirm")}</Button>
                       <Button variant="outline" onClick={() => setRepayingId(null)} className="flex-1">
-                        Cancel
+                        {t("cancel")}
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <Button variant="outline" size="sm" onClick={() => startRepay(l)}>
-                    Record repayment
+                    {t("recordRepayment")}
                   </Button>
                 )
               )}

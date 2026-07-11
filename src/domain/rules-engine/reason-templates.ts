@@ -59,6 +59,11 @@ export function recoLabel(reco: number, saveMonths?: number): string {
   return labels[reco] ?? "Review decision";
 }
 
-export function formatSafeRange(minPoisha: number, maxPoisha: number): string {
-  return `${formatMoney(minPoisha)} – ${formatMoney(maxPoisha)}`;
+export function formatSafeRange(
+  minPoisha: number,
+  maxPoisha: number,
+  currencyCode: string,
+  locale: string,
+): string {
+  return `${formatMoney(minPoisha, currencyCode, locale)} – ${formatMoney(maxPoisha, currencyCode, locale)}`;
 }

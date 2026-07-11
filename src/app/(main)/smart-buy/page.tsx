@@ -23,13 +23,16 @@ import {
   toLeanBuyEval,
 } from "@/infrastructure/sync/sync-queue";
 import { PRIORITY } from "@/lib/constants";
-import { bdtToPoisha, formatMoney } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { useAppStore } from "@/store/app-store";
 import { useToast } from "@/components/ui/toast";
 import type { BuyEvaluation } from "@/infrastructure/db/dexie/schema";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { v4 as uuid } from "uuid";
 export default function SmartBuyPage() {
+  const t = useTranslations("SmartBuy");
+  const { format, toMinor, currencyCode, locale } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
   const { toast } = useToast();
   const [product, setProduct] = useState("");
@@ -39,6 +42,44 @@ export default function SmartBuyPage() {
   const [result, setResult] = useState<SmartBuyResult | null>(null);
   const [meta, setMeta] = useState<Record<string, number>>({});
   const [history, setHistory] = useState<BuyEvaluation[]>([]);
+
+  const categoryOptions = [
+    "gadgets",
+    "shopping",
+    "entertainment",
+    "transport",
+    "food",
+    "other",
+  ];
+
+  const priorityOptions = [
+    { v: PRIORITY.NEED, l: t("priorityNeed") },
+    { v: PRIORITY.USEFUL, l: t("priorityUseful") },
+    { v: PRIORITY.LUXURY, l: t("priorityLuxury") },
+    { v: PRIORITY.IMPULSE, l: t("priorityImpulse") },
+  ];
+
+  function tierText(tier: number) {
+    return (
+      {
+        1: t("tierCheap"),
+        2: t("tierReasonable"),
+        3: t("tierStretch"),
+        4: t("tierExpensive"),
+        5: t("tierUnsafe"),
+      }[tier] ?? tierLabel(tier)
+    );
+  }
+
+  function recoText(reco: number, saveMonths?: number) {
+    const labels: Record<number, string> = {
+      1: t("recoBuyNow"),
+      2: t("recoWaitSalary"),
+      3: saveMonths ? t("recoSaveMonths", { count: saveMonths }) : t("recoSaveBeforeBuying"),
+      4: t("recoAvoid"),
+    };
+    return labels[reco] ?? recoLabel(reco, saveMonths);
+  }
 
   async function loadHistory() {
     if (!userId) return;
@@ -64,7 +105,7 @@ export default function SmartBuyPage() {
         const input = {
           productName: product,
           categoryId,
-          pricePoisha: bdtToPoisha(parseFloat(price) || 0),
+          pricePoisha: toMinor(parseFloat(price) || 0),
           priority,
         };
         const res = evaluateSmartBuy(ctx, input);
@@ -85,7 +126,7 @@ export default function SmartBuyPage() {
     if (!userId || !result) return;
 
     const now = new Date().toISOString();
-    const pricePoisha = bdtToPoisha(parseFloat(price) || 0);
+    const pricePoisha = toMinor(parseFloat(price) || 0);
     const evalRecord = {
       id: uuid(),
       userId,
@@ -110,39 +151,32 @@ export default function SmartBuyPage() {
       toLeanBuyEval(evalRecord),
     );
     await loadHistory();
-    toast(`Saved "${evalRecord.productName || "evaluation"}".`, "success");
+    toast(
+      t("savedToast", { name: evalRecord.productName || t("untitledEvaluation") }),
+      "success",
+    );
   }
 
   return (
-    <AppShell title="Smart Buy">
+    <AppShell title={t("title")}>
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Deterministic rules engine — no AI. Evaluates affordability against
-          your real finances.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("description")}</p>
         <div className="space-y-2">
-          <Label>Product</Label>
+          <Label>{t("productLabel")}</Label>
           <Input
             value={product}
             onChange={(e) => setProduct(e.target.value)}
-            placeholder="iPhone 15"
+            placeholder={t("productPlaceholder")}
           />
         </div>
         <div className="space-y-2">
-          <Label>Category</Label>
+          <Label>{t("categoryLabel")}</Label>
           <select
             className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
           >
-            {[
-              "gadgets",
-              "shopping",
-              "entertainment",
-              "transport",
-              "food",
-              "other",
-            ].map((c) => (
+            {categoryOptions.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -150,7 +184,7 @@ export default function SmartBuyPage() {
           </select>
         </div>
         <div className="space-y-2">
-          <Label>Price (BDT)</Label>
+          <Label>{t("priceLabel", { currency: currencyCode })}</Label>
           <Input
             type="number"
             value={price}
@@ -159,14 +193,9 @@ export default function SmartBuyPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label>Priority</Label>
+          <Label>{t("priorityLabel")}</Label>
           <div className="grid grid-cols-2 gap-2">
-            {[
-              { v: PRIORITY.NEED, l: "Need" },
-              { v: PRIORITY.USEFUL, l: "Useful" },
-              { v: PRIORITY.LUXURY, l: "Luxury" },
-              { v: PRIORITY.IMPULSE, l: "Impulse" },
-            ].map(({ v, l }) => (
+            {priorityOptions.map(({ v, l }) => (
               <Button
                 key={v}
                 type="button"
@@ -180,25 +209,25 @@ export default function SmartBuyPage() {
           </div>
         </div>
         <Button className="w-full" onClick={handleEvaluate}>
-          Save evaluation
+          {t("saveEvaluation")}
         </Button>
 
         {result && (
           <Card className={result.hardUnsafe ? "border-destructive" : ""}>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Result</CardTitle>
+                <CardTitle>{t("result")}</CardTitle>
                 <Badge
                   variant={result.hardUnsafe ? "destructive" : "secondary"}
                 >
-                  {tierLabel(result.tier)}
+                  {tierText(result.tier)}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span>Affordability score</span>
+                  <span>{t("affordabilityScore")}</span>
                   <span className="font-semibold">
                     {result.affordabilityScore}/100
                   </span>
@@ -206,10 +235,10 @@ export default function SmartBuyPage() {
                 <Progress value={result.affordabilityScore} />
               </div>
               <p className="font-medium text-primary">
-                {recoLabel(result.recommendation, result.saveMonths)}
+                {recoText(result.recommendation, result.saveMonths)}
               </p>
               <div>
-                <p className="text-sm font-medium mb-2">Reasoning</p>
+                <p className="text-sm font-medium mb-2">{t("reasoning")}</p>
                 <ul className="list-disc pl-4 text-sm text-muted-foreground space-y-1">
                   {reasonsToText(result.reasonCodes, meta).map((r, i) => (
                     <li key={i}>{r}</li>
@@ -217,11 +246,13 @@ export default function SmartBuyPage() {
                 </ul>
               </div>
               <div className="rounded-lg bg-muted p-3 text-sm">
-                <p className="font-medium">Suggested safe range</p>
+                <p className="font-medium">{t("suggestedSafeRange")}</p>
                 <p>
                   {formatSafeRange(
                     result.safePriceMinPoisha,
                     result.safePriceMaxPoisha,
+                    currencyCode,
+                    locale,
                   )}
                 </p>
               </div>
@@ -231,18 +262,18 @@ export default function SmartBuyPage() {
 
         {history.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm font-medium">Past evaluations</p>
+            <p className="text-sm font-medium">{t("pastEvaluations")}</p>
             {history.map((h) => (
               <Card key={h.id}>
                 <CardContent className="flex items-center justify-between py-3">
                   <div>
-                    <p className="font-medium">{h.productName || "Untitled"}</p>
+                    <p className="font-medium">{h.productName || t("untitled")}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatMoney(h.pricePoisha)} · {new Date(h.createdAt).toLocaleDateString()}
+                      {format(h.pricePoisha)} · {new Date(h.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                   <Badge variant={h.tier >= 5 ? "destructive" : "secondary"}>
-                    {tierLabel(h.tier)}
+                    {tierText(h.tier)}
                   </Badge>
                 </CardContent>
               </Card>

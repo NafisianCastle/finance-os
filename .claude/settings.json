@@ -6,7 +6,12 @@
       "Skill(dataviz:*)",
       "Bash(npx eslint *)",
       "Bash(node -e \"console.log\\(new Intl.NumberFormat\\('bn-BD', {style:'currency', currency:'BDT'}\\).format\\(1234.5\\)\\); console.log\\(new Intl.NumberFormat\\('en-US', {style:'currency', currency:'BDT'}\\).format\\(1234.5\\)\\); console.log\\(new Intl.NumberFormat\\('en-US',{style:'currency',currency:'JPY'}\\).resolvedOptions\\(\\).maximumFractionDigits\\); console.log\\(new Intl.NumberFormat\\('en-US',{style:'currency',currency:'BHD'}\\).resolvedOptions\\(\\).maximumFractionDigits\\);\")",
-      "Bash(npx shadcn@latest add select --yes)"
+      "Bash(npx shadcn@latest add select --yes)",
+      "Bash(node -e \"require\\('/run/media/nafis/Storage/Projects/finance-os/messages/en.json'\\); require\\('/run/media/nafis/Storage/Projects/finance-os/messages/bn.json'\\); console.log\\('JSON OK'\\)\")",
+      "Bash(git stash *)",
+      "Bash(curl -s --cookie \"NEXT_LOCALE=en\" http://localhost:3000/onboarding)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(pkill -f \"next-server\")"
     ]
   }
 }

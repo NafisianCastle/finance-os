@@ -1,5 +1,9 @@
 import { PRIORITY } from "@/lib/constants";
-import { bdtToPoisha } from "@/lib/money";
+import { majorToMinorUnits } from "@/lib/money";
+
+function bdtToPoisha(amount: number): number {
+  return majorToMinorUnits(amount, "BDT");
+}
 import {
   CATEGORY_CAPS,
   GADGET_SAFE_RANGE,

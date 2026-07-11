@@ -1,10 +1,12 @@
 /** Number of minor-unit digits for a currency, e.g. 2 for USD/BDT, 0 for JPY, 3 for BHD */
 export function getCurrencyDigits(currencyCode: string): number {
   try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currencyCode,
-    }).resolvedOptions().maximumFractionDigits;
+    return (
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currencyCode,
+      }).resolvedOptions().maximumFractionDigits ?? 2
+    );
   } catch {
     return 2;
   }

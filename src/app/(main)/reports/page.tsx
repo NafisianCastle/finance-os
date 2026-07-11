@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/app-store";
 import { getDashboardMetrics } from "@/application/analytics";
-import { formatMoney, poishaToBdt } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { ymKey } from "@/lib/utils";
@@ -20,6 +20,7 @@ import {
   format,
 } from "date-fns";
 import { Download, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   BarChart,
   Bar,
@@ -130,6 +131,8 @@ function downloadCSV(data: string, filename: string) {
 }
 
 export default function ReportsPage() {
+  const t = useTranslations("Reports");
+  const { format: formatMoney, toMajor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()));
   const isCurrentMonth = ymKey(selectedMonth) === ymKey(new Date());
@@ -176,20 +179,20 @@ export default function ReportsPage() {
       const health = budgetHealthScore(allocs);
       const wins: string[] = [];
       const mistakes: string[] = [];
-      if (income > expense) wins.push("Positive monthly cashflow");
-      if (health >= 70) wins.push("Strong budget adherence");
-      if (savingsRatePct >= 20) wins.push(`Savings rate: ${savingsRatePct}%`);
+      if (income > expense) wins.push(t("positiveCashflow"));
+      if (health >= 70) wins.push(t("strongBudgetAdherence"));
+      if (savingsRatePct >= 20) wins.push(t("savingsRateWin", { pct: savingsRatePct }));
       for (const b of budgets) {
         const s = byCategory[b.categoryId] ?? 0;
-        const t = b.allocatedPoisha + b.carryPoisha;
-        if (t > 0 && s > t) mistakes.push(`Overspent on ${getCategoryName(b.categoryId)}`);
+        const tot = b.allocatedPoisha + b.carryPoisha;
+        if (tot > 0 && s > tot) mistakes.push(t("overspentOn", { category: getCategoryName(b.categoryId) }));
       }
       if (isCurrentMonth) {
         const metrics = await getDashboardMetrics(userId);
-        if (metrics.maturity.score >= 65) wins.push(`Maturity level: ${metrics.maturity.level}`);
-        if (metrics.cashflow.lowCashWarning) mistakes.push("Low cash forecast — reduce discretionary spend");
+        if (metrics.maturity.score >= 65) wins.push(t("maturityLevel", { level: metrics.maturity.level }));
+        if (metrics.cashflow.lowCashWarning) mistakes.push(t("lowCashForecast"));
       }
-      if (mistakes.length === 0) mistakes.push("No major issues this month — keep it up!");
+      if (mistakes.length === 0) mistakes.push(t("noMajorIssues"));
       setSummary({ income, expense, savingsRatePct, byCategory, wins, mistakes });
 
       const p = await analyzeSpendingPatterns(userId);
@@ -234,12 +237,12 @@ export default function ReportsPage() {
       const end = endOfMonth(start);
       txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
     }
-    const header = "Date,Type,Category,Amount (BDT),Account,Merchant,Note";
+    const header = `Date,Type,Category,Amount (${currencyCode}),Account,Merchant,Note`;
     const rows = txs
       .sort((a, b) => b.date.localeCompare(a.date))
       .map((t) => {
         const type = t.type === TX_TYPES.INCOME ? "Income" : t.type === TX_TYPES.EXPENSE ? "Expense" : "Transfer";
-        const amount = (poishaToBdt(t.amountPoisha)).toFixed(2);
+        const amount = (toMajor(t.amountPoisha)).toFixed(2);
         return [
           t.date,
           type,
@@ -258,12 +261,12 @@ export default function ReportsPage() {
   const monthLabel = format(selectedMonth, "MMMM yyyy");
 
   return (
-    <AppShell title="Reports">
+    <AppShell title={t("title")}>
       <div className="space-y-4">
         <div className="flex items-center justify-between rounded-lg border border-border bg-card px-2 py-1.5">
           <button
             type="button"
-            aria-label="Previous month"
+            aria-label={t("previousMonth")}
             onClick={() => setSelectedMonth((m) => startOfMonth(subMonths(m, 1)))}
             className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent"
           >
@@ -272,7 +275,7 @@ export default function ReportsPage() {
           <p className="text-sm font-semibold">{monthLabel}</p>
           <button
             type="button"
-            aria-label="Next month"
+            aria-label={t("nextMonth")}
             disabled={isCurrentMonth}
             onClick={() => setSelectedMonth((m) => startOfMonth(subMonths(m, -1)))}
             className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30 disabled:pointer-events-none"
@@ -282,25 +285,25 @@ export default function ReportsPage() {
         </div>
 
         {!summary ? (
-          <p className="text-muted-foreground text-sm text-center py-8">Loading…</p>
+          <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p>
         ) : (
         <>
         <div className="grid grid-cols-2 gap-3">
           <Card>
             <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Income</p>
+              <p className="text-xs text-muted-foreground">{t("income")}</p>
               <p className="text-xl font-bold text-primary">{formatMoney(summary.income)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Expenses</p>
+              <p className="text-xs text-muted-foreground">{t("expenses")}</p>
               <p className="text-xl font-bold">{formatMoney(summary.expense)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Savings rate</p>
+              <p className="text-xs text-muted-foreground">{t("savingsRate")}</p>
               <p className={`text-xl font-bold ${summary.savingsRatePct >= 0 ? "text-primary" : "text-destructive"}`}>
                 {summary.savingsRatePct}%
               </p>
@@ -308,7 +311,7 @@ export default function ReportsPage() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Net</p>
+              <p className="text-xs text-muted-foreground">{t("net")}</p>
               <p className={`text-xl font-bold ${summary.income - summary.expense >= 0 ? "text-primary" : "text-destructive"}`}>
                 {formatMoney(summary.income - summary.expense)}
               </p>
@@ -319,7 +322,7 @@ export default function ReportsPage() {
         {categoryBreakdown.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Spend by category — {monthLabel}</CardTitle>
+              <CardTitle className="text-base">{t("spendByCategory", { month: monthLabel })}</CardTitle>
             </CardHeader>
             <CardContent style={{ height: categoryBreakdown.length * 36 + 8 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -358,14 +361,14 @@ export default function ReportsPage() {
         {trend.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Income vs expense — 6 months</CardTitle>
+              <CardTitle className="text-base">{t("incomeVsExpense")}</CardTitle>
             </CardHeader>
             <CardContent className="h-40">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend}>
                   <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                   <YAxis
-                    tickFormatter={(v) => `৳${poishaToBdt(v as number) / 1000}k`}
+                    tickFormatter={(v) => `${Math.round(toMajor(v as number) / 1000)}k`}
                     tick={{ fontSize: 10 }}
                   />
                   <Tooltip formatter={(v: number) => formatMoney(v)} />
@@ -379,7 +382,7 @@ export default function ReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Wins</CardTitle>
+            <CardTitle className="text-base">{t("wins")}</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="list-disc pl-4 text-sm space-y-1">
@@ -390,7 +393,7 @@ export default function ReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Mistakes & opportunities</CardTitle>
+            <CardTitle className="text-base">{t("mistakesOpportunities")}</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="list-disc pl-4 text-sm space-y-1 text-muted-foreground">
@@ -403,17 +406,17 @@ export default function ReportsPage() {
         {patterns && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Spending patterns</CardTitle>
+              <CardTitle className="text-base">{t("spendingPatterns")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Lifestyle creep */}
               <div>
                 <p className="text-xs font-medium mb-1">
                   {patterns.lifestyleCreepPct > 10
-                    ? "Lifestyle creep detected"
+                    ? t("lifestyleCreepDetected")
                     : patterns.lifestyleCreepPct < -10
-                    ? "Spending reduced"
-                    : "Spending stable"}
+                    ? t("spendingReduced")
+                    : t("spendingStable")}
                 </p>
                 <div className="flex items-center gap-2">
                   {patterns.lifestyleCreepPct > 10 ? (
@@ -424,12 +427,13 @@ export default function ReportsPage() {
                     <Minus className="h-4 w-4 text-muted-foreground" />
                   )}
                   <p className="text-sm text-muted-foreground">
-                    Expenses{" "}
-                    {patterns.lifestyleCreepPct >= 0 ? "up" : "down"}{" "}
-                    <span className={patterns.lifestyleCreepPct > 10 ? "text-destructive font-medium" : "font-medium"}>
-                      {Math.abs(patterns.lifestyleCreepPct).toFixed(1)}%
-                    </span>{" "}
-                    vs 2 months ago
+                    {patterns.lifestyleCreepPct >= 0
+                      ? t("expensesUp", {
+                          pct: Math.abs(patterns.lifestyleCreepPct).toFixed(1),
+                        })
+                      : t("expensesDown", {
+                          pct: Math.abs(patterns.lifestyleCreepPct).toFixed(1),
+                        })}
                   </p>
                 </div>
               </div>
@@ -437,7 +441,7 @@ export default function ReportsPage() {
               {/* Money leaks */}
               {patterns.moneyLeaks.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium mb-2">Consistent spend (money leaks)</p>
+                  <p className="text-xs font-medium mb-2">{t("moneyLeaks")}</p>
                   <ul className="space-y-1.5">
                     {patterns.moneyLeaks.map((l) => (
                       <li key={l.category} className="flex items-center justify-between text-xs">
@@ -452,7 +456,7 @@ export default function ReportsPage() {
                           {getCategoryName(l.category)}
                         </span>
                         <span className="text-muted-foreground">
-                          ~{formatMoney(l.avgSpend)}/mo
+                          {t("perMonth", { amount: formatMoney(l.avgSpend) })}
                         </span>
                       </li>
                     ))}
@@ -463,13 +467,13 @@ export default function ReportsPage() {
               {/* Micro-spend */}
               {patterns.microSpendCategories.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium mb-2">Micro-spend categories</p>
+                  <p className="text-xs font-medium mb-2">{t("microSpendCategories")}</p>
                   <ul className="space-y-1.5">
                     {patterns.microSpendCategories.map((m) => (
                       <li key={m.category} className="flex items-center justify-between text-xs">
                         <span>{getCategoryName(m.category)}</span>
                         <span className="text-muted-foreground">
-                          {m.txCount} txns · {formatMoney(m.totalPoisha)}
+                          {t("txnsCount", { count: m.txCount, amount: formatMoney(m.totalPoisha) })}
                         </span>
                       </li>
                     ))}
@@ -483,7 +487,7 @@ export default function ReportsPage() {
         {/* Export */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Export data</CardTitle>
+            <CardTitle className="text-base">{t("exportData")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2">
@@ -496,18 +500,18 @@ export default function ReportsPage() {
               />
               <Button variant="outline" className="gap-2 shrink-0" onClick={() => handleExportCSV("month")}>
                 <Download className="h-4 w-4" />
-                Export month
+                {t("exportMonth")}
               </Button>
             </div>
             <Button variant="outline" className="w-full gap-2" onClick={() => handleExportCSV("all")}>
               <Download className="h-4 w-4" />
-              Export all transactions as CSV
+              {t("exportAll")}
             </Button>
           </CardContent>
         </Card>
 
         <p className="text-xs text-muted-foreground text-center">
-          Generated on demand — not stored remotely.
+          {t("generatedOnDemand")}
         </p>
         </>
         )}

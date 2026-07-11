@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { evaluateSmartBuy } from "@/domain/rules-engine/evaluate";
-import { bdtToPoisha } from "@/lib/money";
+import { majorToMinorUnits } from "@/lib/money";
+
+function bdtToPoisha(amount: number): number {
+  return majorToMinorUnits(amount, "BDT");
+}
 import { PRIORITY } from "@/lib/constants";
 import type { RuleContext } from "@/domain/rules-engine/types";
 

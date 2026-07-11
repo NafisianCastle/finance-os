@@ -13,20 +13,23 @@ import {
   FileText,
   Wallet,
 } from "lucide-react";
-
-const links = [
-  { href: "/smart-buy", label: "Smart Buy", icon: Brain },
-  { href: "/debt", label: "Debt manager", icon: CreditCard },
-  { href: "/loans-given", label: "Loans given", icon: HandCoins },
-  { href: "/liabilities", label: "Held money", icon: Wallet },
-  { href: "/investments", label: "Investments", icon: LineChart },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+import { useTranslations } from "next-intl";
 
 export default function MorePage() {
+  const t = useTranslations("More");
+
+  const links = [
+    { href: "/smart-buy", label: t("smartBuy"), icon: Brain },
+    { href: "/debt", label: t("debtManager"), icon: CreditCard },
+    { href: "/loans-given", label: t("loansGiven"), icon: HandCoins },
+    { href: "/liabilities", label: t("heldMoney"), icon: Wallet },
+    { href: "/investments", label: t("investments"), icon: LineChart },
+    { href: "/reports", label: t("reports"), icon: FileText },
+    { href: "/settings", label: t("settings"), icon: Settings },
+  ];
+
   return (
-    <AppShell title="More">
+    <AppShell title={t("title")}>
       <div className="space-y-2">
         {links.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href}>

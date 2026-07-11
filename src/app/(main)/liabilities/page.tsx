@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
+import { useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { formatMoney, bdtToPoisha } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import type { HeldLiability } from "@/infrastructure/db/dexie/schema";
 import { HELD_STATUS } from "@/lib/constants";
 import { enqueueSync } from "@/infrastructure/sync/sync-queue";
 
 export default function LiabilitiesPage() {
   const userId = useAppStore((s) => s.userId);
+  const t = useTranslations("Liabilities");
+  const { format, toMinor, currencyCode } = useCurrencyFormatter();
   const [items, setItems] = useState<HeldLiability[]>([]);
   const [owner, setOwner] = useState("");
   const [amount, setAmount] = useState("");
@@ -38,7 +41,7 @@ export default function LiabilitiesPage() {
 
   async function addHeld() {
     if (!userId) return;
-    const poisha = bdtToPoisha(parseFloat(amount) || 0);
+    const poisha = toMinor(parseFloat(amount) || 0);
     const now = new Date().toISOString();
     const h: HeldLiability = {
       id: uuid(),
@@ -82,26 +85,26 @@ export default function LiabilitiesPage() {
   }
 
   return (
-    <AppShell title="Held money">
+    <AppShell title={t("title")}>
       <p className="text-sm text-muted-foreground mb-4">
-        Money held for others is a liability — excluded from spendable wealth and net worth.
+        {t("description")}
       </p>
       <div className="space-y-4">
         <Card>
           <CardContent className="pt-4 space-y-3">
             <div className="space-y-2">
-              <Label>Owner</Label>
+              <Label>{t("owner")}</Label>
               <Input value={owner} onChange={(e) => setOwner(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Amount (BDT)</Label>
+              <Label>{t("amountLabel", { currency: currencyCode })}</Label>
               <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Purpose</Label>
+              <Label>{t("purpose")}</Label>
               <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} />
             </div>
-            <Button onClick={addHeld} className="w-full">Record held money</Button>
+            <Button onClick={addHeld} className="w-full">{t("recordHeldMoney")}</Button>
           </CardContent>
         </Card>
         {items.map((h) => (
@@ -112,15 +115,15 @@ export default function LiabilitiesPage() {
                   <p className="font-medium">{h.owner}</p>
                   <p className="text-xs text-muted-foreground">{h.purpose}</p>
                 </div>
-                <p className="font-semibold text-warning">{formatMoney(h.amountPoisha)}</p>
+                <p className="font-semibold text-warning">{format(h.amountPoisha)}</p>
               </div>
               {h.status === HELD_STATUS.ACTIVE && (
                 <Button size="sm" variant="outline" onClick={() => markReturned(h.id)}>
-                  Mark returned
+                  {t("markReturned")}
                 </Button>
               )}
               {h.status === HELD_STATUS.RETURNED && (
-                <p className="text-xs text-muted-foreground">Returned {h.returnDate}</p>
+                <p className="text-xs text-muted-foreground">{t("returnedOn", { date: h.returnDate ?? "" })}</p>
               )}
             </CardContent>
           </Card>

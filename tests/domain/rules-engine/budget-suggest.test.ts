@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { suggestBudgets, budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
-import { bdtToPoisha } from "@/lib/money";
+import { majorToMinorUnits } from "@/lib/money";
+
+function bdtToPoisha(amount: number): number {
+  return majorToMinorUnits(amount, "BDT");
+}
 
 describe("Budget suggestion engine", () => {
   it("allocates savings for low income band", () => {

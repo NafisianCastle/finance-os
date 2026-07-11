@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { computeInvestmentMetrics } from "@/domain/investments/calculate";
 import { INVESTMENT_EVENT_TYPE, INVESTMENT_STATUS } from "@/lib/investment-constants";
-import { bdtToPoisha } from "@/lib/money";
+import { majorToMinorUnits } from "@/lib/money";
+
+function bdtToPoisha(amount: number): number {
+  return majorToMinorUnits(amount, "BDT");
+}
 import type { Investment, InvestmentEvent } from "@/infrastructure/db/dexie/schema";
 
 const baseInv: Investment = {

@@ -8,12 +8,15 @@ import { Label } from "@/components/ui/label";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import type { Account } from "@/infrastructure/db/dexie/schema";
 import { TX_TYPES, SYSTEM_CATEGORIES } from "@/lib/constants";
-import { bdtToPoisha } from "@/lib/money";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { useAppStore } from "@/store/app-store";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+import { useTranslations } from "next-intl";
 
 export default function NewTransactionPage() {
+  const t = useTranslations("NewTransaction");
+  const { toMinor, currencyCode } = useCurrencyFormatter();
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -85,7 +88,7 @@ export default function NewTransactionPage() {
     setLoading(true);
     await addTransaction(userId, {
       type,
-      amountPoisha: bdtToPoisha(parseFloat(amount) || 0),
+      amountPoisha: toMinor(parseFloat(amount) || 0),
       accountId,
       categoryId: type === TX_TYPES.INCOME ? "income" : categoryId,
       date,
@@ -96,15 +99,17 @@ export default function NewTransactionPage() {
     router.push("/transactions");
   }
 
+  const typeOptions = [
+    { v: TX_TYPES.EXPENSE, l: t("expense") },
+    { v: TX_TYPES.INCOME, l: t("income") },
+    { v: TX_TYPES.TRANSFER, l: t("transfer") },
+  ];
+
   return (
-    <AppShell title="Add transaction">
+    <AppShell title={t("title")}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex gap-2">
-          {[
-            { v: TX_TYPES.EXPENSE, l: "Expense" },
-            { v: TX_TYPES.INCOME, l: "Income" },
-            { v: TX_TYPES.TRANSFER, l: "Transfer" },
-          ].map(({ v, l }) => (
+          {typeOptions.map(({ v, l }) => (
             <Button
               key={v}
               type="button"
@@ -118,7 +123,7 @@ export default function NewTransactionPage() {
         </div>
 
         <div className="space-y-2">
-          <Label>Amount (BDT)</Label>
+          <Label>{t("amountLabel", { currency: currencyCode })}</Label>
           <Input
             type="number"
             inputMode="decimal"
@@ -130,12 +135,12 @@ export default function NewTransactionPage() {
         </div>
 
         <div className="space-y-2">
-          <Label>Date</Label>
+          <Label>{t("dateLabel")}</Label>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
 
         <div className="space-y-2">
-          <Label>Account</Label>
+          <Label>{t("accountLabel")}</Label>
           <select
             className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
             value={accountId}
@@ -149,7 +154,7 @@ export default function NewTransactionPage() {
 
         {type !== TX_TYPES.INCOME && (
           <div className="space-y-2">
-            <Label>Category</Label>
+            <Label>{t("categoryLabel")}</Label>
             <select
               className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
               value={categoryId}
@@ -164,12 +169,12 @@ export default function NewTransactionPage() {
 
         {type === TX_TYPES.EXPENSE && (
           <div className="space-y-2" ref={merchantRef}>
-            <Label>Merchant (optional)</Label>
+            <Label>{t("merchantLabel")}</Label>
             <Input
               value={merchant}
               onChange={(e) => { setMerchant(e.target.value); setShowSuggestions(true); }}
               onFocus={() => setShowSuggestions(true)}
-              placeholder="e.g. Shajgoj, Pathao"
+              placeholder={t("merchantPlaceholder")}
               autoComplete="off"
             />
             {showSuggestions && filteredSuggestions.length > 0 && (
@@ -190,12 +195,12 @@ export default function NewTransactionPage() {
         )}
 
         <div className="space-y-2">
-          <Label>Note</Label>
+          <Label>{t("noteLabel")}</Label>
           <Input value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
 
         <Button type="submit" className="w-full" disabled={loading}>
-          Save
+          {t("save")}
         </Button>
       </form>
     </AppShell>
