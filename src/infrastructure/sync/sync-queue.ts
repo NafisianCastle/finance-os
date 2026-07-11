@@ -367,6 +367,106 @@ export async function pullRemoteChanges(
   return count;
 }
 
+/**
+ * Merges accounts that were duplicated by the pre-fix onboarding bug (each
+ * new browser re-seeded its own "Cash"/"Bank" with fresh uuids instead of
+ * pulling the existing ones). Groups remote accounts by name+type, keeps the
+ * oldest per group, sums balances into it, re-points transactions, and soft
+ * deletes the rest. Runs directly against Supabase since it needs a full
+ * cross-device view; local Dexie is refreshed via pullRemoteChanges after.
+ */
+export async function mergeDuplicateAccounts(
+  userId: string
+): Promise<{ merged: number; groups: number }> {
+  const supabase = createClient();
+  if (!supabase) return { merged: 0, groups: 0 };
+
+  const { data: accounts, error } = await supabase
+    .from("accounts")
+    .select("*")
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+  if (error || !accounts) return { merged: 0, groups: 0 };
+
+  const groups = new Map<string, typeof accounts>();
+  for (const acc of accounts) {
+    const key = `${(acc.name as string).trim().toLowerCase()}|${acc.type_smallint}`;
+    const list = groups.get(key) ?? [];
+    list.push(acc);
+    groups.set(key, list);
+  }
+
+  let merged = 0;
+  let groupsAffected = 0;
+  const now = new Date().toISOString();
+
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    groupsAffected++;
+
+    const sorted = [...group].sort(
+      (a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime()
+    );
+    const canonical = sorted[0];
+    const dupes = sorted.slice(1);
+    const totalBalance = group.reduce((sum, a) => sum + Number(a.balance_poisha), 0);
+
+    for (const dupe of dupes) {
+      await supabase
+        .from("transactions")
+        .update({ account_id: canonical.id, updated_at: now })
+        .eq("user_id", userId)
+        .eq("account_id", dupe.id);
+      await supabase
+        .from("transactions")
+        .update({ to_account_id: canonical.id, updated_at: now })
+        .eq("user_id", userId)
+        .eq("to_account_id", dupe.id);
+      await supabase
+        .from("accounts")
+        .update({ deleted_at: now, updated_at: now })
+        .eq("user_id", userId)
+        .eq("id", dupe.id);
+      merged++;
+    }
+
+    await supabase
+      .from("accounts")
+      .update({ balance_poisha: totalBalance, updated_at: now })
+      .eq("user_id", userId)
+      .eq("id", canonical.id);
+  }
+
+  if (groupsAffected > 0) {
+    // Remote is now the source of truth for accounts/transactions — drop any
+    // queued local edits referencing merged accounts so they don't get
+    // re-pushed over the merge, then refresh Dexie from the merged state.
+    const db = getDb();
+    await db.syncQueue.filter((i) => i.table === "accounts" || i.table === "transactions").delete();
+    await pullRemoteChanges(userId, null);
+  }
+
+  return { merged, groups: groupsAffected };
+}
+
+/**
+ * Fixes local budget duplicates caused by the same onboarding-style race as
+ * mergeDuplicateAccounts: a fresh browser's empty local Dexie made
+ * applySuggestions/addBudget think no budget existed for a category yet, so
+ * it created one with a new uuid. The remote `budgets` table has a
+ * unique(user_id, ym_char6, category_id) constraint and the push path
+ * upserts on that key, so the server was never actually duplicated — only
+ * the local cache holds two id'd rows for the same category+month. Fix is
+ * just: drop the local cache and re-pull the already-correct server state.
+ */
+export async function repairLocalBudgets(userId: string): Promise<void> {
+  const db = getDb();
+  const local = await db.budgets.where("userId").equals(userId).toArray();
+  await db.budgets.bulkDelete(local.map((b) => b.id));
+  await db.syncQueue.filter((i) => i.table === "budgets").delete();
+  await pullRemoteChanges(userId, null);
+}
+
 export async function pruneBuyEvaluations(userId: string) {
   const db = getDb();
   const all = await db.buyEvaluations

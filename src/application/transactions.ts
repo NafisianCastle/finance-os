@@ -19,37 +19,28 @@ export async function addTransaction(
     syncStatus: "pending",
   };
 
-  const accountUpdates: { id: string; type_smallint: number; name: string; balance_poisha: number }[] = [];
-
+  // Local balance is updated immediately for instant UI feedback. The pushed
+  // transaction row (below) is the source of truth remotely — a Postgres
+  // trigger derives the account balance delta from it atomically, so two
+  // devices adding transactions to the same account offline can't clobber
+  // each other's balance change the way an absolute balance upsert would.
   await db.transaction("rw", db.transactions, db.accounts, async () => {
     await db.transactions.put(tx as never);
     const account = await db.accounts.get(data.accountId);
     if (!account) return;
 
     if (data.type === TX_TYPES.INCOME) {
-      const bal = account.balancePoisha + data.amountPoisha;
-      await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
-      accountUpdates.push({ id: account.id, type_smallint: account.type, name: account.name, balance_poisha: bal });
+      await db.accounts.update(account.id, { balancePoisha: account.balancePoisha + data.amountPoisha, updatedAt: now });
     } else if (data.type === TX_TYPES.EXPENSE) {
-      const bal = account.balancePoisha - data.amountPoisha;
-      await db.accounts.update(account.id, { balancePoisha: bal, updatedAt: now });
-      accountUpdates.push({ id: account.id, type_smallint: account.type, name: account.name, balance_poisha: bal });
+      await db.accounts.update(account.id, { balancePoisha: account.balancePoisha - data.amountPoisha, updatedAt: now });
     } else if (data.type === TX_TYPES.TRANSFER && data.toAccountId) {
-      const fromBal = account.balancePoisha - data.amountPoisha;
-      await db.accounts.update(account.id, { balancePoisha: fromBal, updatedAt: now });
-      accountUpdates.push({ id: account.id, type_smallint: account.type, name: account.name, balance_poisha: fromBal });
+      await db.accounts.update(account.id, { balancePoisha: account.balancePoisha - data.amountPoisha, updatedAt: now });
       const to = await db.accounts.get(data.toAccountId);
       if (to) {
-        const toBal = to.balancePoisha + data.amountPoisha;
-        await db.accounts.update(to.id, { balancePoisha: toBal, updatedAt: now });
-        accountUpdates.push({ id: to.id, type_smallint: to.type, name: to.name, balance_poisha: toBal });
+        await db.accounts.update(to.id, { balancePoisha: to.balancePoisha + data.amountPoisha, updatedAt: now });
       }
     }
   });
-
-  for (const acc of accountUpdates) {
-    await enqueueSync("accounts", acc.id, "upsert", acc);
-  }
 
   await enqueueSync("transactions", tx.id, "upsert", {
     id: tx.id,
@@ -70,8 +61,26 @@ export async function addTransaction(
 export async function deleteTransaction(userId: string, txId: string) {
   const db = getDb();
   const tx = await db.transactions.get(txId);
-  if (!tx || tx.userId !== userId) return;
+  if (!tx || tx.userId !== userId || tx.deletedAt) return;
   const now = new Date().toISOString();
-  await db.transactions.update(txId, { deletedAt: now, updatedAt: now });
+
+  await db.transaction("rw", db.transactions, db.accounts, async () => {
+    await db.transactions.update(txId, { deletedAt: now, updatedAt: now });
+    const account = await db.accounts.get(tx.accountId);
+    if (!account) return;
+
+    if (tx.type === TX_TYPES.INCOME) {
+      await db.accounts.update(account.id, { balancePoisha: account.balancePoisha - tx.amountPoisha, updatedAt: now });
+    } else if (tx.type === TX_TYPES.EXPENSE) {
+      await db.accounts.update(account.id, { balancePoisha: account.balancePoisha + tx.amountPoisha, updatedAt: now });
+    } else if (tx.type === TX_TYPES.TRANSFER && tx.toAccountId) {
+      await db.accounts.update(account.id, { balancePoisha: account.balancePoisha + tx.amountPoisha, updatedAt: now });
+      const to = await db.accounts.get(tx.toAccountId);
+      if (to) {
+        await db.accounts.update(to.id, { balancePoisha: to.balancePoisha - tx.amountPoisha, updatedAt: now });
+      }
+    }
+  });
+
   await enqueueSync("transactions", txId, "delete", { id: txId });
 }

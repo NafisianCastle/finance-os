@@ -13,7 +13,13 @@ import {
   createClient,
   isSupabaseConfigured,
 } from "@/infrastructure/supabase/client";
-import { enqueueSync, processSyncQueue, repairAccountSync } from "@/infrastructure/sync/sync-queue";
+import {
+  enqueueSync,
+  mergeDuplicateAccounts,
+  processSyncQueue,
+  repairAccountSync,
+  repairLocalBudgets,
+} from "@/infrastructure/sync/sync-queue";
 import { bdtToPoisha, poishaToBdt } from "@/lib/money";
 import { useAppStore } from "@/store/app-store";
 import type { Account } from "@/infrastructure/db/dexie/schema";
@@ -197,6 +203,35 @@ export default function SettingsPage() {
     setSyncMsg(msg);
     setSyncing(false);
     toast(msg, errors ? "error" : "success");
+  }
+
+  async function handleMergeDuplicates() {
+    if (!userId) return;
+    const ok = await confirm({
+      title: "Merge duplicate accounts?",
+      description:
+        "Combines accounts with the same name (e.g. two \"Cash\" accounts) into one, summing their balances and re-pointing transactions. This changes remote data immediately and can't be undone.",
+      confirmLabel: "Merge",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setSyncing(true);
+    const { merged, groups } = await mergeDuplicateAccounts(userId);
+    setSyncing(false);
+    toast(
+      groups > 0
+        ? `Merged ${merged} duplicate account(s) across ${groups} group(s).`
+        : "No duplicate accounts found.",
+      "success"
+    );
+  }
+
+  async function handleRepairBudgets() {
+    if (!userId) return;
+    setSyncing(true);
+    await repairLocalBudgets(userId);
+    setSyncing(false);
+    toast("Budgets refreshed from the server.", "success");
   }
 
   async function handleChangePassword() {
@@ -399,6 +434,36 @@ export default function SettingsPage() {
             )}
             {syncMsg && (
               <p className="text-xs text-muted-foreground">{syncMsg}</p>
+            )}
+            {isSupabaseConfigured() && (
+              <>
+                <p className="text-sm font-medium mt-2">Duplicate accounts</p>
+                <p className="text-sm text-muted-foreground">
+                  If you see the same account (e.g. two &quot;Cash&quot;) after
+                  using multiple browsers, merge them into one.
+                </p>
+                <Button
+                  onClick={handleMergeDuplicates}
+                  disabled={syncing}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Merge duplicate accounts
+                </Button>
+                <p className="text-sm font-medium mt-2">Duplicate budgets</p>
+                <p className="text-sm text-muted-foreground">
+                  If a budget category shows up twice, refresh budgets from
+                  the server to clear the duplicate.
+                </p>
+                <Button
+                  onClick={handleRepairBudgets}
+                  disabled={syncing}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Repair budgets
+                </Button>
+              </>
             )}
           </CardContent>
         </Card>

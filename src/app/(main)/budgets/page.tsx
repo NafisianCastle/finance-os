@@ -15,7 +15,8 @@ import {
 } from "@/domain/rules-engine/budget-suggest.rules";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import type { Budget, Category } from "@/infrastructure/db/dexie/schema";
-import { enqueueSync } from "@/infrastructure/sync/sync-queue";
+import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
+import { enqueueSync, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
 import { TX_TYPES } from "@/lib/constants";
 import { bdtToPoisha, formatMoney, poishaToBdt } from "@/lib/money";
 import { cn, ymKey } from "@/lib/utils";
@@ -47,6 +48,14 @@ export default function BudgetsPage() {
     if (!userId) return;
     const db = getDb();
     const ym = ymKey();
+
+    // Pull before reading local budgets — on a fresh browser the local cache
+    // is empty, and without this, applySuggestions/addBudget below would
+    // conclude a category has no budget yet and create a duplicate local row
+    // for one that already exists remotely.
+    if (isSupabaseConfigured()) {
+      await pullRemoteChanges(userId, null);
+    }
 
     // Load categories
     const cats = await db.categories.where("userId").equals(userId).toArray();

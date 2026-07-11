@@ -3,13 +3,23 @@ import { getDb } from "@/infrastructure/db/dexie/database";
 import { SYSTEM_CATEGORIES } from "@/lib/constants";
 import { bdtToPoisha } from "@/lib/money";
 import type { UserProfile, Account, Category } from "@/infrastructure/db/dexie/schema";
-import { enqueueSync } from "@/infrastructure/sync/sync-queue";
+import { enqueueSync, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
+import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 
 export async function seedUserData(userId: string, monthlyIncomeBdt: number) {
   const db = getDb();
   const now = new Date().toISOString();
 
-  const existing = await db.userProfiles.where("userId").equals(userId).first();
+  let existing = await db.userProfiles.where("userId").equals(userId).first();
+
+  // Local Dexie is empty on a fresh browser/device — pull from Supabase before
+  // seeding fresh default accounts, otherwise a user who already onboarded on
+  // another browser gets duplicate "Cash"/"Bank" accounts created here.
+  if (!existing?.onboardingComplete && isSupabaseConfigured()) {
+    await pullRemoteChanges(userId, null);
+    existing = await db.userProfiles.where("userId").equals(userId).first();
+  }
+
   if (existing?.onboardingComplete) return existing;
 
   const profile: UserProfile = {
