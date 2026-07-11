@@ -24,13 +24,24 @@ export function SyncOnFocus() {
       setPending(count);
     };
 
-    const onFocus = () => sync();
-    window.addEventListener("focus", onFocus);
+    const onTrigger = () => sync();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") sync();
+    };
+    // "focus" alone is unreliable in iOS standalone PWA mode (no background
+    // sync API on iOS — the outbox only drains while the app is actually
+    // foregrounded), so also watch visibilitychange and the online event to
+    // catch reconnects as early as possible.
+    window.addEventListener("focus", onTrigger);
+    window.addEventListener("online", onTrigger);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     const intervalId = window.setInterval(sync, 1000 * 60 * 5); // sync every 5 minutes
 
     sync();
     return () => {
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", onTrigger);
+      window.removeEventListener("online", onTrigger);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       window.clearInterval(intervalId);
     };
   }, [setPending]);

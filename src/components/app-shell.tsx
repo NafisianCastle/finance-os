@@ -4,6 +4,7 @@ import { BottomNav } from "./bottom-nav";
 import { SyncBadge } from "./sync-badge";
 import { NotificationCenter } from "./notification-center";
 import { FloatingActionButton } from "./floating-action-button";
+import { UnsyncedWarningBanner } from "./unsynced-warning-banner";
 
 export function AppShell({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
@@ -17,6 +18,7 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
           </div>
         </div>
       </header>
+      <UnsyncedWarningBanner />
       <main className="px-4 py-4">{children}</main>
       <FloatingActionButton />
       <BottomNav />
