@@ -2,7 +2,7 @@
 
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
-import { processSyncQueue } from "@/infrastructure/sync/sync-queue";
+import { processSyncQueue, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
 import { useAppStore } from "@/store/app-store";
 import { useEffect } from "react";
 
@@ -16,6 +16,10 @@ export function SyncOnFocus() {
       const uid = useAppStore.getState().userId;
       if (!uid) return;
       await processSyncQueue(uid);
+      const lastSyncedAt = useAppStore.getState().lastSyncedAt;
+      const syncStartedAt = new Date().toISOString();
+      await pullRemoteChanges(uid, lastSyncedAt);
+      useAppStore.getState().setLastSyncedAt(syncStartedAt);
       const count = await getDb().syncQueue.count();
       setPending(count);
     };

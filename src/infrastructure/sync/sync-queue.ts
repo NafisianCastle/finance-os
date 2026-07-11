@@ -142,6 +142,189 @@ export async function processSyncQueue(
   return { pushed, errors, lastError };
 }
 
+// Remote (snake_case Supabase row) → local (camelCase Dexie row) mappers.
+// Categories are excluded: system category ids are slugs, not syncable (see
+// repairAccountSync comment above).
+const REMOTE_MAPPERS: Record<
+  string,
+  (row: Record<string, unknown>) => Record<string, unknown>
+> = {
+  user_profiles: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    monthlyIncomePoisha: r.monthly_income_poisha,
+    currencyCode: r.currency_code,
+    locale: r.locale,
+    emergencyMonths: r.emergency_months,
+    onboardingComplete: r.onboarding_complete,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  accounts: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    type: r.type_smallint,
+    name: r.name,
+    balancePoisha: r.balance_poisha,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  transactions: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    type: r.type_smallint,
+    amountPoisha: r.amount_poisha,
+    accountId: r.account_id,
+    toAccountId: r.to_account_id,
+    categoryId: r.category_id,
+    date: r.tx_date,
+    note: r.note,
+    tags: r.tags,
+    merchant: r.merchant,
+    recurringId: r.recurring_id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  budgets: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    ym: r.ym_char6,
+    categoryId: r.category_id,
+    allocatedPoisha: r.allocated_poisha,
+    carryPoisha: r.carry_poisha,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  debts: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    lender: r.lender,
+    principalPoisha: r.principal_poisha,
+    interestRate: r.interest_rate,
+    remainingPoisha: r.remaining_poisha,
+    borrowDate: r.borrow_date,
+    dueDate: r.due_date,
+    status: r.status_smallint,
+    note: r.note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  loans_given: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    borrower: r.borrower,
+    amountPoisha: r.amount_poisha,
+    remainingPoisha: r.remaining_poisha,
+    borrowDate: r.borrow_date,
+    dueDate: r.due_date,
+    status: r.status_smallint,
+    note: r.note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  held_liabilities: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    owner: r.owner,
+    amountPoisha: r.amount_poisha,
+    holdDate: r.hold_date,
+    returnDate: r.return_date,
+    purpose: r.purpose,
+    status: r.status_smallint,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  goals: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    name: r.name,
+    targetPoisha: r.target_poisha,
+    savedPoisha: r.saved_poisha,
+    deadline: r.deadline,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  investments: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    type: r.type_smallint,
+    name: r.name,
+    investorName: r.investor_name,
+    investedPoisha: r.invested_poisha,
+    currentValuePoisha: r.current_value_poisha,
+    projectStartDate: r.project_start_date,
+    projectEndDate: r.project_end_date,
+    declaredProfitPoisha: r.declared_profit_poisha,
+    quantity: r.quantity,
+    pricePerUnitPoisha: r.price_per_unit_poisha,
+    interestRatePct: r.interest_rate_pct,
+    purity: r.purity,
+    status: r.status_smallint,
+    note: r.note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  investment_events: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    investmentId: r.investment_id,
+    type: r.type_smallint,
+    amountPoisha: r.amount_poisha,
+    eventDate: r.event_date,
+    note: r.note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  buy_evaluations: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    productName: r.product_name,
+    categoryId: r.category_id,
+    pricePoisha: r.price_poisha,
+    priority: r.priority,
+    score: r.score,
+    tier: r.tier,
+    recommendation: r.recommendation,
+    reasonCodes: r.reason_codes,
+    saveMonths: r.save_months,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+};
+
+// Dexie table name for each remote table.
+const LOCAL_TABLES: Record<string, keyof ReturnType<typeof getDb>> = {
+  user_profiles: "userProfiles",
+  accounts: "accounts",
+  transactions: "transactions",
+  budgets: "budgets",
+  debts: "debts",
+  loans_given: "loansGiven",
+  held_liabilities: "heldLiabilities",
+  goals: "goals",
+  investments: "investments",
+  investment_events: "investmentEvents",
+  buy_evaluations: "buyEvaluations",
+};
+
+/**
+ * Pulls remote rows changed since lastSyncedAt and merges them into Dexie,
+ * last-write-wins by updated_at. A remote row only overwrites a local row
+ * when it's strictly newer; otherwise the local (possibly still-queued)
+ * edit is left alone so it can be pushed later. Categories aren't synced
+ * (see repairAccountSync comment).
+ */
 export async function pullRemoteChanges(
   userId: string,
   lastSyncedAt: string | null
@@ -149,26 +332,11 @@ export async function pullRemoteChanges(
   const supabase = createClient();
   if (!supabase) return 0;
 
-  const tables = [
-    "accounts",
-    "transactions",
-    "categories",
-    "budgets",
-    "debts",
-    "loans_given",
-    "held_liabilities",
-    "goals",
-    "investments",
-    "investment_events",
-    "buy_evaluations",
-    "user_profiles",
-  ] as const;
-
   const db = getDb();
   let count = 0;
   const since = lastSyncedAt ?? "1970-01-01T00:00:00Z";
 
-  for (const table of tables) {
+  for (const [table, mapper] of Object.entries(REMOTE_MAPPERS)) {
     const { data, error } = await supabase
       .from(table)
       .select("*")
@@ -177,8 +345,23 @@ export async function pullRemoteChanges(
       .limit(SYNC_BATCH_SIZE);
 
     if (error || !data) continue;
-    count += data.length;
-    // Map remote → local in sync mapper (simplified: skip if no supabase configured)
+
+    const localTableName = LOCAL_TABLES[table];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const localTable = (db as any)[localTableName];
+
+    for (const remoteRow of data) {
+      const mapped = mapper(remoteRow) as { id: string; updatedAt: string };
+      const existing = await localTable.get(mapped.id);
+      if (existing && existing.updatedAt >= mapped.updatedAt) continue;
+
+      await localTable.put(mapped);
+      // A newer remote row supersedes any stale queued local edit for it.
+      await db.syncQueue
+        .filter((item) => item.table === table && item.recordId === mapped.id)
+        .delete();
+      count++;
+    }
   }
 
   return count;
