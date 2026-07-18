@@ -58,6 +58,66 @@ export async function addTransaction(
   return tx;
 }
 
+export async function updateTransaction(
+  userId: string,
+  txId: string,
+  data: Omit<Transaction, "id" | "userId" | "createdAt" | "updatedAt" | "deletedAt" | "syncStatus">
+) {
+  const db = getDb();
+  const existing = await db.transactions.get(txId);
+  if (!existing || existing.userId !== userId || existing.deletedAt) return;
+  const now = new Date().toISOString();
+
+  const tx: Transaction = {
+    ...existing,
+    ...data,
+    id: txId,
+    userId,
+    updatedAt: now,
+    syncStatus: "pending",
+  };
+
+  // Reverse the old transaction's balance effect, then apply the new one —
+  // handles edits that change amount, type, or account in one pass instead
+  // of requiring the caller to diff old vs new themselves.
+  await db.transaction("rw", db.transactions, db.accounts, async () => {
+    const reverse = async (t: Transaction, sign: 1 | -1) => {
+      const account = await db.accounts.get(t.accountId);
+      if (!account) return;
+      if (t.type === TX_TYPES.INCOME) {
+        await db.accounts.update(account.id, { balancePoisha: account.balancePoisha + sign * t.amountPoisha, updatedAt: now });
+      } else if (t.type === TX_TYPES.EXPENSE) {
+        await db.accounts.update(account.id, { balancePoisha: account.balancePoisha - sign * t.amountPoisha, updatedAt: now });
+      } else if (t.type === TX_TYPES.TRANSFER && t.toAccountId) {
+        await db.accounts.update(account.id, { balancePoisha: account.balancePoisha - sign * t.amountPoisha, updatedAt: now });
+        const to = await db.accounts.get(t.toAccountId);
+        if (to) {
+          await db.accounts.update(to.id, { balancePoisha: to.balancePoisha + sign * t.amountPoisha, updatedAt: now });
+        }
+      }
+    };
+
+    await reverse(existing, -1);
+    await db.transactions.put(tx as never);
+    await reverse(tx, 1);
+  });
+
+  await enqueueSync("transactions", tx.id, "upsert", {
+    id: tx.id,
+    type_smallint: tx.type,
+    amount_poisha: tx.amountPoisha,
+    account_id: tx.accountId,
+    to_account_id: tx.toAccountId,
+    category_id: tx.categoryId,
+    tx_date: tx.date,
+    note: tx.note,
+    tags: tx.tags,
+    merchant: tx.merchant,
+  });
+
+  return tx;
+}
+
 export async function deleteTransaction(userId: string, txId: string) {
   const db = getDb();
   const tx = await db.transactions.get(txId);

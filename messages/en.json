@@ -139,7 +139,10 @@
     "title": "Activity",
     "addTransaction": "Add transaction",
     "emptyTitle": "No transactions yet",
-    "emptyDescription": "Add your first income or expense to start tracking."
+    "emptyDescription": "Add your first income or expense to start tracking.",
+    "delete": "Delete transaction",
+    "deleteConfirm": "Delete this transaction? This cannot be undone.",
+    "notFound": "Transaction not found."
   },
   "Budgets": {
     "title": "Budgets",
@@ -390,7 +393,8 @@
     "merchantLabel": "Merchant (optional)",
     "merchantPlaceholder": "e.g. Shajgoj, Pathao",
     "noteLabel": "Note",
-    "save": "Save"
+    "save": "Save",
+    "editTitle": "Edit transaction"
   },
   "More": {
     "title": "More",

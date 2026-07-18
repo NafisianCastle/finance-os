@@ -54,22 +54,24 @@ export default function TransactionsPage() {
           />
         ) : (
           txs.slice(0, 50).map((tx) => (
-            <Card key={tx.id} className="transition-colors hover:bg-accent/40">
-              <CardContent className="flex items-center justify-between py-3">
-                <div>
-                  <p className="font-medium capitalize">{tx.categoryId}</p>
-                  <p className="text-xs text-muted-foreground">{tx.date}{tx.merchant ? ` · ${tx.merchant}` : ""}</p>
-                </div>
-                <span
-                  className={
-                    tx.type === TX_TYPES.INCOME ? "text-primary font-semibold" : "font-semibold"
-                  }
-                >
-                  {tx.type === TX_TYPES.INCOME ? "+" : "-"}
-                  {format(tx.amountPoisha)}
-                </span>
-              </CardContent>
-            </Card>
+            <Link key={tx.id} href={`/transactions/${tx.id}`} className="block">
+              <Card className="transition-colors hover:bg-accent/40">
+                <CardContent className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="font-medium capitalize">{tx.categoryId}</p>
+                    <p className="text-xs text-muted-foreground">{tx.date}{tx.merchant ? ` · ${tx.merchant}` : ""}</p>
+                  </div>
+                  <span
+                    className={
+                      tx.type === TX_TYPES.INCOME ? "text-primary font-semibold" : "font-semibold"
+                    }
+                  >
+                    {tx.type === TX_TYPES.INCOME ? "+" : "-"}
+                    {format(tx.amountPoisha)}
+                  </span>
+                </CardContent>
+              </Card>
+            </Link>
           ))
         )}
       </div>

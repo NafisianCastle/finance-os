@@ -139,7 +139,10 @@
     "title": "কার্যক্রম",
     "addTransaction": "লেনদেন যোগ করুন",
     "emptyTitle": "এখনও কোনো লেনদেন নেই",
-    "emptyDescription": "ট্র্যাকিং শুরু করতে আপনার প্রথম আয় বা খরচ যোগ করুন।"
+    "emptyDescription": "ট্র্যাকিং শুরু করতে আপনার প্রথম আয় বা খরচ যোগ করুন।",
+    "delete": "লেনদেন মুছুন",
+    "deleteConfirm": "এই লেনদেনটি মুছবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।",
+    "notFound": "লেনদেন পাওয়া যায়নি।"
   },
   "Budgets": {
     "title": "বাজেট",
@@ -390,7 +393,8 @@
     "merchantLabel": "বিক্রেতা (ঐচ্ছিক)",
     "merchantPlaceholder": "যেমন Shajgoj, Pathao",
     "noteLabel": "নোট",
-    "save": "সংরক্ষণ করুন"
+    "save": "সংরক্ষণ করুন",
+    "editTitle": "লেনদেন সম্পাদনা করুন"
   },
   "More": {
     "title": "আরও",
