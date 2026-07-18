@@ -105,7 +105,7 @@ describe("getDashboardMetrics", () => {
     expect(metrics.maturity.components.impulse).toBeNull();
   });
 
-  it("returns 100 budget score but only 1 measured component after applying suggested budgets with no other activity", async () => {
+  it("returns null budget score after applying suggested budgets with no actual spending activity", async () => {
     await getDb().accounts.put(account());
     const profile = {
       id: "p1",
@@ -132,9 +132,52 @@ describe("getDashboardMetrics", () => {
     await getDb().budgets.put(budget as never);
 
     const metrics = await getDashboardMetrics(USER_ID);
-    expect(metrics.maturity.components.budget).toBe(100);
-    expect(metrics.maturity.measuredCount).toBe(1);
+    expect(metrics.maturity.components.budget).toBeNull();
+    expect(metrics.maturity.measuredCount).toBe(0);
     expect(metrics.maturity.totalCount).toBe(6);
+  });
+
+  it("computes budget score when there is actual spending against budgets", async () => {
+    await getDb().accounts.put(account());
+    const profile = {
+      id: "p1",
+      userId: USER_ID,
+      monthlyIncomePoisha: 50_000,
+      currencyCode: "BDT",
+      locale: "en",
+      emergencyMonths: 3,
+      onboardingComplete: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().userProfiles.put(profile as never);
+    const today = new Date().toISOString().slice(0, 7);
+    const budget = {
+      id: "b1",
+      userId: USER_ID,
+      ym: ymKey(),
+      categoryId: "food",
+      allocatedPoisha: 10_000,
+      carryPoisha: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().budgets.put(budget as never);
+    const tx: Transaction = {
+      id: "t1",
+      userId: USER_ID,
+      type: TX_TYPES.EXPENSE,
+      amountPoisha: 9_800,
+      accountId: "acc-1",
+      categoryId: "food",
+      date: today,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().transactions.put(tx);
+
+    const metrics = await getDashboardMetrics(USER_ID);
+    expect(metrics.maturity.components.budget).toBe(100);
   });
 
   it("computes impulse control from impulse-tagged transactions when no buy evaluations exist", async () => {

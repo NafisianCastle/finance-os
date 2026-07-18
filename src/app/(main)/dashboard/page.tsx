@@ -58,13 +58,6 @@ export default function DashboardPage() {
     goals: t("maturityGoalsDesc"),
     impulse: t("maturityImpulseDesc"),
   };
-  const MATURITY_LEVEL_DESC: Record<string, string> = {
-    Poor: t("maturityLevelDesc_Poor"),
-    Improving: t("maturityLevelDesc_Improving"),
-    Stable: t("maturityLevelDesc_Stable"),
-    Disciplined: t("maturityLevelDesc_Disciplined"),
-    "Wealth Builder": t("maturityLevelDesc_Wealth Builder"),
-  };
   const userId = useAppStore((s) => s.userId);
   const setNotifications = useNotificationStore((s) => s.setNotifications);
   const notifications = useNotificationStore((s) => s.notifications);

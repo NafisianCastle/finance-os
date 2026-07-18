@@ -73,6 +73,7 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
     const spent = byCategory[b.categoryId] ?? 0;
     return { allocated: b.allocatedPoisha + b.carryPoisha, spent };
   });
+  const hasBudgetActivity = budgetAllocations.some((b) => b.spent > 0);
 
   const unsafeBuys = buyEvals.filter((e) => e.tier >= 5).length;
   const smartBuyDiscipline =
@@ -86,7 +87,7 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
   const impulseControl = impulseControlFromEvals ?? impulseControlFromTx;
 
   const maturity = computeMaturityScore({
-    budgetAdherencePct: budgets.length > 0 ? budgetHealthScore(budgetAllocations) : null,
+    budgetAdherencePct: budgets.length > 0 && hasBudgetActivity ? budgetHealthScore(budgetAllocations) : null,
     savingsConsistencyPct:
       income > 0 ? Math.round(Math.max(0, (income - expense) / income) * 100) : null,
     debtScorePct:
