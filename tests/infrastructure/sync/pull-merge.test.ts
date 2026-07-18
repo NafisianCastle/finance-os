@@ -3,17 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const tableData: Record<string, Record<string, unknown>[]> = {};
 
+function chainableQuery(table: string) {
+  const builder = {
+    select: () => builder,
+    eq: () => builder,
+    gt: () => builder,
+    gte: () => builder,
+    limit: () => builder,
+    then: (resolve: (v: { data: unknown; error: null }) => void) =>
+      resolve({ data: tableData[table] ?? [], error: null }),
+  };
+  return builder;
+}
+
 vi.mock("@/infrastructure/supabase/client", () => ({
   createClient: () => ({
-    from: (table: string) => ({
-      select: () => ({
-        eq: () => ({
-          gt: () => ({
-            limit: async () => ({ data: tableData[table] ?? [], error: null }),
-          }),
-        }),
-      }),
-    }),
+    from: (table: string) => chainableQuery(table),
   }),
 }));
 

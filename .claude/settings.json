@@ -11,7 +11,9 @@
       "Bash(git stash *)",
       "Bash(curl -s --cookie \"NEXT_LOCALE=en\" http://localhost:3000/onboarding)",
       "Bash(pkill -f \"next dev\")",
-      "Bash(pkill -f \"next-server\")"
+      "Bash(pkill -f \"next-server\")",
+      "Skill(run)",
+      "Skill(run:*)"
     ]
   }
 }

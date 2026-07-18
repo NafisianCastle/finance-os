@@ -1,7 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,8 @@ import {
   repairLocalBudgets,
 } from "@/infrastructure/sync/sync-queue";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
-import { useAppStore } from "@/store/app-store";
+import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
+import Link from "next/link";
 import type { Account } from "@/infrastructure/db/dexie/schema";
 import { ACCOUNT_TYPES, SUPPORTED_CURRENCIES, SUPPORTED_UI_LOCALES } from "@/lib/constants";
 import { Loader2, Moon, Sun, Plus, Trash2 } from "lucide-react";
@@ -525,9 +526,16 @@ export default function SettingsPage() {
 
             <p className="text-sm font-medium mt-2">{t("cloudSync")}</p>
             <p className="text-sm text-muted-foreground">
-              {isSupabaseConfigured() ? t("cloudSyncConfigured") : t("cloudSyncOffline")}
+              {isSupabaseConfigured() && userId !== LOCAL_USER_ID
+                ? t("cloudSyncConfigured")
+                : t("cloudSyncOffline")}
             </p>
-            {isSupabaseConfigured() && (
+            {isSupabaseConfigured() && userId === LOCAL_USER_ID && (
+              <Link href="/signup" className={buttonVariants({ className: "w-full" })}>
+                {t("signUpToSync")}
+              </Link>
+            )}
+            {isSupabaseConfigured() && userId !== LOCAL_USER_ID && (
               <Button
                 onClick={handleSync}
                 disabled={syncing}
@@ -540,7 +548,7 @@ export default function SettingsPage() {
             {syncMsg && (
               <p className="text-xs text-muted-foreground">{syncMsg}</p>
             )}
-            {isSupabaseConfigured() && (
+            {isSupabaseConfigured() && userId !== LOCAL_USER_ID && (
               <>
                 <p className="text-sm font-medium mt-2">{t("duplicates")}</p>
                 <p className="text-sm text-muted-foreground">

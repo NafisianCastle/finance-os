@@ -12,12 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES, SUPPORTED_UI_LOCALES } from "@/lib/constants";
 import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export default function OnboardingPage() {
   const t = useTranslations("Onboarding");
@@ -29,17 +28,8 @@ export default function OnboardingPage() {
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [uiLocale, setUiLocale] = useState(currentLocale);
   const [loading, setLoading] = useState(false);
-  const authConfigured = isSupabaseConfigured();
-
-  useEffect(() => {
-    if (authConfigured && (!userId || userId === LOCAL_USER_ID)) {
-      router.replace("/login");
-    }
-  }, [authConfigured, router, userId]);
 
   async function handleStart() {
-    if (authConfigured && (!userId || userId === LOCAL_USER_ID)) return;
-
     setLoading(true);
     const currentUserId = userId ?? LOCAL_USER_ID;
     setUserId(currentUserId);

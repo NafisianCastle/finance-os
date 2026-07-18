@@ -5,7 +5,7 @@ import { SyncOnFocus } from "@/components/sync-on-focus";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import { pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
-import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
+import { useAppStore } from "@/store/app-store";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -24,13 +24,8 @@ export default function MainLayout({
 
     if (!userId) {
       if (!allowUnauthenticated.includes(pathname)) {
-        router.replace(authConfigured ? "/login" : "/onboarding");
+        router.replace("/onboarding");
       }
-      return;
-    }
-
-    if (authConfigured && userId === LOCAL_USER_ID && pathname !== "/login") {
-      router.replace("/login");
       return;
     }
 
