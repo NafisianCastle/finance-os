@@ -65,12 +65,15 @@ export default function SignupPage() {
       return;
     }
 
-    if (data.user?.id) {
-      setUserId(data.user.id);
+    if (data.session?.user?.id) {
+      setUserId(data.session.user.id);
       router.push("/onboarding");
       return;
     }
 
+    // signUp() can return a user with no session when email confirmation is
+    // required — writing data under that id would fail every RLS check
+    // (auth.uid() is null with no session) until the user actually logs in.
     setError(t("signupIncomplete"));
     setLoading(false);
   }

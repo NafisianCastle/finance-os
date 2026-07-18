@@ -26,7 +26,7 @@
     "signUp": "Sign up",
     "creatingAccount": "Creating account…",
     "alreadyHaveAccount": "Already have an account?",
-    "signupIncomplete": "Sign-up succeeded, but we could not complete authentication."
+    "signupIncomplete": "Account created. Check your email to confirm it, then log in to continue."
   },
   "Settings": {
     "title": "Settings",

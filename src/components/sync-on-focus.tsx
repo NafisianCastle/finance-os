@@ -3,7 +3,7 @@
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import { processSyncQueue, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
-import { useAppStore } from "@/store/app-store";
+import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 import { useEffect } from "react";
 
 const SYNC_TIMEOUT_MS = 20_000;
@@ -28,7 +28,10 @@ export function SyncOnFocus() {
       // fire close together — avoid overlapping sync cycles stacking up.
       if (inFlight) return;
       const uid = useAppStore.getState().userId;
-      if (!uid) return;
+      // LOCAL_USER_ID is a local-only pseudo-user (not signed up / no Supabase
+      // session) — pushing its rows with that as user_id fails RLS since
+      // auth.uid() won't match it.
+      if (!uid || uid === LOCAL_USER_ID) return;
 
       inFlight = true;
       useAppStore.getState().setIsSyncing(true);

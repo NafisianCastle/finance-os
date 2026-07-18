@@ -78,5 +78,7 @@ export interface CashflowForecast {
 export interface MaturityResult {
   score: number;
   level: string;
-  components: Record<string, number>;
+  components: Record<string, number | null>;
+  measuredCount: number;
+  totalCount: number;
 }
