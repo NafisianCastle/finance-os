@@ -90,7 +90,7 @@ export default function OnboardingPage() {
             className="w-full"
             size="lg"
             onClick={handleStart}
-            disabled={loading}
+            loading={loading}
           >
             {loading ? t("settingUp") : t("getStarted")}
           </Button>

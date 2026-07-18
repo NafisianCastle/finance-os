@@ -41,8 +41,8 @@ export default function SmartBuyPage() {
   const [price, setPrice] = useState("");
   const [priority, setPriority] = useState<number>(PRIORITY.USEFUL);
   const [result, setResult] = useState<SmartBuyResult | null>(null);
-  const [meta, setMeta] = useState<Record<string, number>>({});
   const [history, setHistory] = useState<BuyEvaluation[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const categoryOptions = [
     "gadgets",
@@ -111,10 +111,6 @@ export default function SmartBuyPage() {
         };
         const res = evaluateSmartBuy(ctx, input);
         setResult(res);
-        const ratioPct = Math.round(
-          (input.pricePoisha / ctx.monthlyIncomePoisha) * 100,
-        );
-        setMeta({ ratioPct });
       } catch (error) {
         console.error("Error auto-evaluating smart buy:", error);
       }
@@ -126,36 +122,41 @@ export default function SmartBuyPage() {
   async function handleEvaluate() {
     if (!userId || !result) return;
 
-    const now = new Date().toISOString();
-    const pricePoisha = toMinor(parseFloat(price) || 0);
-    const evalRecord = {
-      id: uuid(),
-      userId,
-      productName: product.slice(0, 80),
-      categoryId,
-      pricePoisha,
-      priority,
-      score: result.affordabilityScore,
-      tier: result.tier,
-      recommendation: result.recommendation,
-      reasonCodes: result.reasonCodes,
-      saveMonths: result.saveMonths,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await getDb().buyEvaluations.put(evalRecord as never);
-    await pruneBuyEvaluations(userId);
-    await enqueueSync(
-      "buy_evaluations",
-      evalRecord.id,
-      "upsert",
-      toLeanBuyEval(evalRecord),
-    );
-    await loadHistory();
-    toast(
-      t("savedToast", { name: evalRecord.productName || t("untitledEvaluation") }),
-      "success",
-    );
+    setIsSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const pricePoisha = toMinor(parseFloat(price) || 0);
+      const evalRecord = {
+        id: uuid(),
+        userId,
+        productName: product.slice(0, 80),
+        categoryId,
+        pricePoisha,
+        priority,
+        score: result.affordabilityScore,
+        tier: result.tier,
+        recommendation: result.recommendation,
+        reasonCodes: result.reasonCodes,
+        saveMonths: result.saveMonths,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await getDb().buyEvaluations.put(evalRecord as never);
+      await pruneBuyEvaluations(userId);
+      await enqueueSync(
+        "buy_evaluations",
+        evalRecord.id,
+        "upsert",
+        toLeanBuyEval(evalRecord),
+      );
+      await loadHistory();
+      toast(
+        t("savedToast", { name: evalRecord.productName || t("untitledEvaluation") }),
+        "success",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -204,7 +205,7 @@ export default function SmartBuyPage() {
             ))}
           </div>
         </div>
-        <Button className="w-full" onClick={handleEvaluate}>
+        <Button className="w-full" onClick={handleEvaluate} loading={isSaving}>
           {t("saveEvaluation")}
         </Button>
 
@@ -236,7 +237,7 @@ export default function SmartBuyPage() {
               <div>
                 <p className="text-sm font-medium mb-2">{t("reasoning")}</p>
                 <ul className="list-disc pl-4 text-sm text-muted-foreground space-y-1">
-                  {reasonsToText(result.reasonCodes, meta).map((r, i) => (
+                  {reasonsToText(result.reasonCodes, result.reasonMetadata).map((r, i) => (
                     <li key={i}>{r}</li>
                   ))}
                 </ul>

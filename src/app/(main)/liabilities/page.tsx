@@ -24,6 +24,8 @@ export default function LiabilitiesPage() {
   const [owner, setOwner] = useState("");
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const [returningId, setReturningId] = useState<string | null>(null);
 
   async function load() {
     if (!userId) return;
@@ -42,47 +44,57 @@ export default function LiabilitiesPage() {
 
   async function addHeld() {
     if (!userId) return;
-    const poisha = toMinor(parseFloat(amount) || 0);
-    const now = new Date().toISOString();
-    const h: HeldLiability = {
-      id: uuid(),
-      userId,
-      owner,
-      amountPoisha: poisha,
-      holdDate: now.slice(0, 10),
-      purpose,
-      status: HELD_STATUS.ACTIVE,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await getDb().heldLiabilities.put(h as never);
-    await enqueueSync("held_liabilities", h.id, "upsert", {
-      id: h.id,
-      owner: h.owner,
-      amount_poisha: poisha,
-      hold_date: h.holdDate,
-      purpose: h.purpose,
-      status_smallint: 1,
-    });
-    setOwner("");
-    setAmount("");
-    setPurpose("");
-    load();
+    setIsAdding(true);
+    try {
+      const poisha = toMinor(parseFloat(amount) || 0);
+      const now = new Date().toISOString();
+      const h: HeldLiability = {
+        id: uuid(),
+        userId,
+        owner,
+        amountPoisha: poisha,
+        holdDate: now.slice(0, 10),
+        purpose,
+        status: HELD_STATUS.ACTIVE,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await getDb().heldLiabilities.put(h as never);
+      await enqueueSync("held_liabilities", h.id, "upsert", {
+        id: h.id,
+        owner: h.owner,
+        amount_poisha: poisha,
+        hold_date: h.holdDate,
+        purpose: h.purpose,
+        status_smallint: 1,
+      });
+      setOwner("");
+      setAmount("");
+      setPurpose("");
+      load();
+    } finally {
+      setIsAdding(false);
+    }
   }
 
   async function markReturned(id: string) {
-    const now = new Date().toISOString();
-    await getDb().heldLiabilities.update(id, {
-      status: HELD_STATUS.RETURNED,
-      returnDate: now.slice(0, 10),
-      updatedAt: now,
-    });
-    await enqueueSync("held_liabilities", id, "upsert", {
-      id,
-      status_smallint: 2,
-      return_date: now.slice(0, 10),
-    });
-    load();
+    setReturningId(id);
+    try {
+      const now = new Date().toISOString();
+      await getDb().heldLiabilities.update(id, {
+        status: HELD_STATUS.RETURNED,
+        returnDate: now.slice(0, 10),
+        updatedAt: now,
+      });
+      await enqueueSync("held_liabilities", id, "upsert", {
+        id,
+        status_smallint: 2,
+        return_date: now.slice(0, 10),
+      });
+      load();
+    } finally {
+      setReturningId(null);
+    }
   }
 
   return (
@@ -105,7 +117,7 @@ export default function LiabilitiesPage() {
               <Label>{t("purpose")}</Label>
               <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} />
             </div>
-            <Button onClick={addHeld} className="w-full">{t("recordHeldMoney")}</Button>
+            <Button onClick={addHeld} className="w-full" loading={isAdding}>{t("recordHeldMoney")}</Button>
           </CardContent>
         </Card>
         {items.map((h) => (
@@ -119,7 +131,12 @@ export default function LiabilitiesPage() {
                 <p className="font-semibold text-warning">{format(h.amountPoisha)}</p>
               </div>
               {h.status === HELD_STATUS.ACTIVE && (
-                <Button size="sm" variant="outline" onClick={() => markReturned(h.id)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => markReturned(h.id)}
+                  loading={returningId === h.id}
+                >
                   {t("markReturned")}
                 </Button>
               )}

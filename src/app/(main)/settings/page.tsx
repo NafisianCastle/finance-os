@@ -36,7 +36,7 @@ import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 import Link from "next/link";
 import type { Account } from "@/infrastructure/db/dexie/schema";
 import { ACCOUNT_TYPES, SUPPORTED_CURRENCIES, SUPPORTED_UI_LOCALES } from "@/lib/constants";
-import { Loader2, Moon, Sun, Plus, Trash2 } from "lucide-react";
+import { Moon, Sun, Plus, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -78,6 +78,8 @@ export default function SettingsPage() {
   const [newAccountBalance, setNewAccountBalance] = useState("");
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
+  const [exportingData, setExportingData] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     setCurrency(currencyCode);
@@ -299,15 +301,20 @@ export default function SettingsPage() {
 
   async function handleExportData() {
     if (!userId) return;
-    const data = await exportUserDataAsJson(userId);
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `finance-os-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast(t("backupDownloaded"), "success");
+    setExportingData(true);
+    try {
+      const data = await exportUserDataAsJson(userId);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `finance-os-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast(t("backupDownloaded"), "success");
+    } finally {
+      setExportingData(false);
+    }
   }
 
   async function handleChangePassword() {
@@ -327,9 +334,10 @@ export default function SettingsPage() {
   }
 
   async function handleRepairDatabase() {
+    const cloudSynced = isSupabaseConfigured() && userId !== LOCAL_USER_ID;
     const ok = await confirm({
       title: t("repairTitle"),
-      description: t("repairDescription"),
+      description: cloudSynced ? t("repairDescriptionCloud") : t("repairDescriptionLocal"),
       confirmLabel: t("clearData"),
       variant: "destructive",
     });
@@ -351,18 +359,23 @@ export default function SettingsPage() {
     });
     if (!ok) return;
 
-    if (isSupabaseConfigured()) {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase.auth.signOut();
+    setLoggingOut(true);
+    try {
+      if (isSupabaseConfigured()) {
+        const supabase = createClient();
+        if (supabase) {
+          await supabase.auth.signOut();
+        }
+        setUserId(null);
+        router.push("/login");
+        return;
       }
-      setUserId(null);
-      router.push("/login");
-      return;
-    }
 
-    setUserId(null);
-    router.push("/onboarding");
+      setUserId(null);
+      router.push("/onboarding");
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   return (
@@ -378,9 +391,8 @@ export default function SettingsPage() {
               onClick={saveProfile}
               variant="secondary"
               className="w-full"
-              disabled={savingIncome}
+              loading={savingIncome}
             >
-              {savingIncome && <Loader2 className="h-4 w-4 animate-spin" />}
               {t("saveIncome")}
             </Button>
           </CardContent>
@@ -413,9 +425,8 @@ export default function SettingsPage() {
                   <Button
                     variant="secondary"
                     onClick={() => saveAccountBalance(acc)}
-                    disabled={savingAccountId === acc.id}
+                    loading={savingAccountId === acc.id}
                   >
-                    {savingAccountId === acc.id && <Loader2 className="h-4 w-4 animate-spin" />}
                     {t("save")}
                   </Button>
                   <Button
@@ -423,13 +434,9 @@ export default function SettingsPage() {
                     size="icon"
                     aria-label={t("removeAria", { name: acc.name })}
                     onClick={() => handleDeleteAccount(acc)}
-                    disabled={deletingAccountId === acc.id}
+                    loading={deletingAccountId === acc.id}
                   >
-                    {deletingAccountId === acc.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    )}
+                    {deletingAccountId !== acc.id && <Trash2 className="h-4 w-4 text-destructive" />}
                   </Button>
                 </div>
               ))
@@ -465,9 +472,10 @@ export default function SettingsPage() {
                   variant="secondary"
                   className="gap-1.5 shrink-0"
                   onClick={handleCreateAccount}
-                  disabled={creatingAccount || !newAccountName.trim()}
+                  disabled={!newAccountName.trim()}
+                  loading={creatingAccount}
                 >
-                  {creatingAccount ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  <Plus className="h-4 w-4" />
                   {t("add")}
                 </Button>
               </div>
@@ -509,9 +517,8 @@ export default function SettingsPage() {
               onClick={saveCurrencyAndLocale}
               variant="secondary"
               className="w-full"
-              disabled={savingCurrency}
+              loading={savingCurrency}
             >
-              {savingCurrency && <Loader2 className="h-4 w-4 animate-spin" />}
               {t("saveCurrencyLanguage")}
             </Button>
 
@@ -529,10 +536,9 @@ export default function SettingsPage() {
             {isSupabaseConfigured() && userId !== LOCAL_USER_ID && (
               <Button
                 onClick={handleSync}
-                disabled={syncing}
                 className="w-full"
+                loading={syncing}
               >
-                {syncing && <Loader2 className="h-4 w-4 animate-spin" />}
                 {syncing ? t("syncing") : t("syncNow")}
               </Button>
             )}
@@ -547,9 +553,9 @@ export default function SettingsPage() {
                 </p>
                 <Button
                   onClick={handleFixDuplicates}
-                  disabled={syncing}
                   variant="outline"
                   className="w-full"
+                  loading={syncing}
                 >
                   {t("fixDuplicates")}
                 </Button>
@@ -564,19 +570,33 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">
               {t("diagnosticsDescription")}
             </p>
-            <Button onClick={handleExportData} variant="outline" className="w-full">
+            <Button onClick={handleExportData} variant="outline" className="w-full" loading={exportingData}>
               {t("exportData")}
             </Button>
             {isSupabaseConfigured() && (
               <Button
                 onClick={handleForceResync}
-                disabled={syncing}
                 variant="outline"
                 className="w-full"
+                loading={syncing}
               >
                 {t("forceResync")}
               </Button>
             )}
+            <div className="pt-2 border-t">
+              <p className="text-sm font-medium mt-2">{t("repairDatabase")}</p>
+              <p className="text-sm text-muted-foreground mb-3">
+                {t("repairDatabaseDescription")}
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleRepairDatabase}
+                loading={repairing}
+              >
+                {t("repairDatabase")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -591,9 +611,9 @@ export default function SettingsPage() {
                 variant="outline"
                 className="w-full"
                 onClick={handleChangePassword}
-                disabled={!email || resettingPassword}
+                disabled={!email}
+                loading={resettingPassword}
               >
-                {resettingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
                 {t("changePassword")}
               </Button>
             </CardContent>
@@ -618,17 +638,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={handleRepairDatabase}
-          disabled={repairing}
-        >
-          {repairing && <Loader2 className="h-4 w-4 animate-spin" />}
-          {t("repairDatabase")}
-        </Button>
-
-        <Button variant="destructive" className="w-full" onClick={handleLogout}>
+        <Button variant="destructive" className="w-full" onClick={handleLogout} loading={loggingOut}>
           {t("logout")}
         </Button>
       </div>

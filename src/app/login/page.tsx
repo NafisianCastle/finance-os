@@ -107,7 +107,8 @@ export default function LoginPage() {
           <Button
             className="w-full"
             onClick={handleLogin}
-            disabled={loading || !email || !password}
+            disabled={!email || !password}
+            loading={loading}
           >
             {loading ? t("loggingIn") : t("login")}
           </Button>

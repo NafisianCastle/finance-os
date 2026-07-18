@@ -48,6 +48,8 @@ export default function DebtPage() {
   const [repayingId, setRepayingId] = useState<string | null>(null);
   const [repayAmount, setRepayAmount] = useState("");
   const [repayAccountId, setRepayAccountId] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const [isRepaying, setIsRepaying] = useState(false);
 
   async function load() {
     if (!userId) return;
@@ -72,43 +74,53 @@ export default function DebtPage() {
     if (!userId || !repayAccountId) return;
     const poisha = toMinor(parseFloat(repayAmount) || 0);
     if (poisha <= 0) return;
-    await repayDebt(userId, debt, poisha, repayAccountId);
-    setRepayingId(null);
-    setRepayAmount("");
-    toast(t("repaymentRecorded"), "success");
-    load();
+    setIsRepaying(true);
+    try {
+      await repayDebt(userId, debt, poisha, repayAccountId);
+      setRepayingId(null);
+      setRepayAmount("");
+      toast(t("repaymentRecorded"), "success");
+      load();
+    } finally {
+      setIsRepaying(false);
+    }
   }
 
   async function addDebt() {
     if (!userId) return;
-    const poisha = toMinor(parseFloat(amount) || 0);
-    const now = new Date().toISOString();
-    const d: Debt = {
-      id: uuid(),
-      userId,
-      lender,
-      principalPoisha: poisha,
-      remainingPoisha: poisha,
-      interestRate: interestRate ? parseFloat(interestRate) : undefined,
-      borrowDate: now.slice(0, 10),
-      dueDate: dueDate || undefined,
-      status: DEBT_STATUS.ACTIVE,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await getDb().debts.put(d as never);
-    await enqueueSync("debts", d.id, "upsert", {
-      id: d.id,
-      lender: d.lender,
-      principal_poisha: poisha,
-      remaining_poisha: poisha,
-      interest_rate: d.interestRate ?? null,
-      borrow_date: d.borrowDate,
-      due_date: d.dueDate ?? null,
-      status_smallint: 1,
-    });
-    setLender(""); setAmount(""); setDueDate(""); setInterestRate("");
-    load();
+    setIsAdding(true);
+    try {
+      const poisha = toMinor(parseFloat(amount) || 0);
+      const now = new Date().toISOString();
+      const d: Debt = {
+        id: uuid(),
+        userId,
+        lender,
+        principalPoisha: poisha,
+        remainingPoisha: poisha,
+        interestRate: interestRate ? parseFloat(interestRate) : undefined,
+        borrowDate: now.slice(0, 10),
+        dueDate: dueDate || undefined,
+        status: DEBT_STATUS.ACTIVE,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await getDb().debts.put(d as never);
+      await enqueueSync("debts", d.id, "upsert", {
+        id: d.id,
+        lender: d.lender,
+        principal_poisha: poisha,
+        remaining_poisha: poisha,
+        interest_rate: d.interestRate ?? null,
+        borrow_date: d.borrowDate,
+        due_date: d.dueDate ?? null,
+        status_smallint: 1,
+      });
+      setLender(""); setAmount(""); setDueDate(""); setInterestRate("");
+      load();
+    } finally {
+      setIsAdding(false);
+    }
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -198,7 +210,7 @@ export default function DebtPage() {
               <Label>{t("dueDateOptional")}</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
-            <Button onClick={addDebt} className="w-full">{t("addDebt")}</Button>
+            <Button onClick={addDebt} className="w-full" loading={isAdding}>{t("addDebt")}</Button>
           </CardContent>
         </Card>
 
@@ -249,7 +261,7 @@ export default function DebtPage() {
                         </select>
                       </div>
                       <div className="flex gap-2">
-                        <Button onClick={() => submitRepay(d)} className="flex-1">{t("confirm")}</Button>
+                        <Button onClick={() => submitRepay(d)} className="flex-1" loading={isRepaying}>{t("confirm")}</Button>
                         <Button variant="outline" onClick={() => setRepayingId(null)} className="flex-1">
                           {t("cancel")}
                         </Button>

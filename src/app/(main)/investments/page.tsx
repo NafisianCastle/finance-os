@@ -111,6 +111,8 @@ export default function InvestmentsPage() {
   const [eventAmount, setEventAmount] = useState("");
   const [eventAmountMode, setEventAmountMode] = useState<"amount" | "percent">("amount");
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [isCreating, setIsCreating] = useState(false);
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
 
   async function load() {
     if (!userId) return;
@@ -121,50 +123,60 @@ export default function InvestmentsPage() {
 
   async function handleCreate() {
     if (!userId || !name) return;
-    const isUnitType = UNIT_TYPES.has(type);
-    const quantityNum = quantity ? parseFloat(quantity) : undefined;
-    const pricePerUnitPoisha = pricePerUnit ? toMinor(parseFloat(pricePerUnit)) : undefined;
-    const investedPoisha =
-      isUnitType && quantityNum && pricePerUnitPoisha
-        ? Math.round(quantityNum * pricePerUnitPoisha)
-        : toMinor(parseFloat(invested) || 0);
-    const declaredProfitPoisha = declaredProfit
-      ? declaredProfitMode === "percent"
-        ? Math.round(investedPoisha * (parseFloat(declaredProfit) / 100))
-        : toMinor(parseFloat(declaredProfit))
-      : undefined;
-    await createInvestment(userId, {
-      type,
-      name,
-      investorName: investor || undefined,
-      investedPoisha,
-      declaredProfitPoisha,
-      projectStartDate: startDate,
-      projectEndDate: endDate || undefined,
-      quantity: quantityNum,
-      pricePerUnitPoisha: isUnitType ? pricePerUnitPoisha : undefined,
-      interestRatePct: RATE_TYPES.has(type) && interestRatePct ? parseFloat(interestRatePct) : undefined,
-      purity: GOLD_TYPES.has(type) ? purity : undefined,
-    });
-    setName(""); setInvestor(""); setInvested(""); setDeclaredProfit(""); setDeclaredProfitMode("amount"); setEndDate("");
-    setQuantity(""); setPricePerUnit(""); setInterestRatePct("");
-    load();
+    setIsCreating(true);
+    try {
+      const isUnitType = UNIT_TYPES.has(type);
+      const quantityNum = quantity ? parseFloat(quantity) : undefined;
+      const pricePerUnitPoisha = pricePerUnit ? toMinor(parseFloat(pricePerUnit)) : undefined;
+      const investedPoisha =
+        isUnitType && quantityNum && pricePerUnitPoisha
+          ? Math.round(quantityNum * pricePerUnitPoisha)
+          : toMinor(parseFloat(invested) || 0);
+      const declaredProfitPoisha = declaredProfit
+        ? declaredProfitMode === "percent"
+          ? Math.round(investedPoisha * (parseFloat(declaredProfit) / 100))
+          : toMinor(parseFloat(declaredProfit))
+        : undefined;
+      await createInvestment(userId, {
+        type,
+        name,
+        investorName: investor || undefined,
+        investedPoisha,
+        declaredProfitPoisha,
+        projectStartDate: startDate,
+        projectEndDate: endDate || undefined,
+        quantity: quantityNum,
+        pricePerUnitPoisha: isUnitType ? pricePerUnitPoisha : undefined,
+        interestRatePct: RATE_TYPES.has(type) && interestRatePct ? parseFloat(interestRatePct) : undefined,
+        purity: GOLD_TYPES.has(type) ? purity : undefined,
+      });
+      setName(""); setInvestor(""); setInvested(""); setDeclaredProfit(""); setDeclaredProfitMode("amount"); setEndDate("");
+      setQuantity(""); setPricePerUnit(""); setInterestRatePct("");
+      load();
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   async function handleAddEvent(investmentId: string, investedPoisha: number) {
     if (!userId || !eventAmount) return;
-    const amountPoisha =
-      eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
-        ? Math.round(investedPoisha * (parseFloat(eventAmount) / 100))
-        : toMinor(parseFloat(eventAmount) || 0);
-    await addInvestmentEvent(userId, investmentId, {
-      type: eventType,
-      amountPoisha,
-      eventDate,
-    });
-    setEventAmount("");
-    setEventAmountMode("amount");
-    load();
+    setIsAddingEvent(true);
+    try {
+      const amountPoisha =
+        eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
+          ? Math.round(investedPoisha * (parseFloat(eventAmount) / 100))
+          : toMinor(parseFloat(eventAmount) || 0);
+      await addInvestmentEvent(userId, investmentId, {
+        type: eventType,
+        amountPoisha,
+        eventDate,
+      });
+      setEventAmount("");
+      setEventAmountMode("amount");
+      load();
+    } finally {
+      setIsAddingEvent(false);
+    }
   }
 
   const portfolioTotal = rows.reduce((s, r) => s + r.metrics.effectiveValuePoisha, 0);
@@ -455,7 +467,7 @@ export default function InvestmentsPage() {
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
             </div>
-            <Button onClick={handleCreate} className="w-full">{t("addInvestment")}</Button>
+            <Button onClick={handleCreate} className="w-full" loading={isCreating}>{t("addInvestment")}</Button>
           </CardContent>
         </Card>
 
@@ -606,7 +618,12 @@ export default function InvestmentsPage() {
                     />
                     <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
                   </div>
-                  <Button size="sm" className="w-full" onClick={() => handleAddEvent(inv.id, m.investedPoisha)}>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleAddEvent(inv.id, m.investedPoisha)}
+                    loading={isAddingEvent}
+                  >
                     {t("addEvent", { label: INVESTMENT_EVENT_LABELS[eventType] })}
                   </Button>
                 </div>

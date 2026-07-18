@@ -3,7 +3,6 @@
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -23,10 +22,22 @@ import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { cn, ymKey } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { endOfMonth, isWithinInterval, parseISO, startOfMonth } from "date-fns";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { v4 as uuid } from "uuid";
+
+function budgetHealthLevel(score: number) {
+  if (score >= 85) return "Excellent";
+  if (score >= 70) return "Good";
+  if (score >= 50) return "NeedsAttention";
+  return "Overspending";
+}
+
+function budgetHealthColor(score: number) {
+  if (score >= 70) return "hsl(var(--success))";
+  if (score >= 50) return "hsl(var(--warning))";
+  return "oklch(var(--destructive))";
+}
 
 export default function BudgetsPage() {
   const t = useTranslations("Budgets");
@@ -47,6 +58,10 @@ export default function BudgetsPage() {
   const [newCategoryId, setNewCategoryId] = useState("");
   const [newAmountBdt, setNewAmountBdt] = useState("");
   const [error, setError] = useState<string>("");
+  const [isApplyingSuggestions, setIsApplyingSuggestions] = useState(false);
+  const [isSubmittingBudget, setIsSubmittingBudget] = useState(false);
+  const [savingEditId, setSavingEditId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function load() {
     if (!userId) return;
@@ -119,40 +134,45 @@ export default function BudgetsPage() {
       toast(t("setIncomeFirst"), "error");
       return;
     }
-    const suggestions = suggestBudgets(income);
-    const ym = ymKey();
-    const now = new Date().toISOString();
-    const db = getDb();
-    for (const s of suggestions) {
-      const existing = budgets.find((b) => b.categoryId === s.categoryId);
-      if (existing) {
-        await db.budgets.update(existing.id, {
-          allocatedPoisha: s.suggestedPoisha,
-          updatedAt: now,
-        });
-      } else {
-        const rec = {
-          id: uuid(),
-          userId,
-          ym,
-          categoryId: s.categoryId,
-          allocatedPoisha: s.suggestedPoisha,
-          carryPoisha: 0,
-          createdAt: now,
-          updatedAt: now,
-        };
-        await db.budgets.put(rec as never);
-        await enqueueSync("budgets", rec.id, "upsert", {
-          id: rec.id,
-          ym_char6: ym,
-          category_id: s.categoryId,
-          allocated_poisha: s.suggestedPoisha,
-          carry_poisha: 0,
-        });
+    setIsApplyingSuggestions(true);
+    try {
+      const suggestions = suggestBudgets(income);
+      const ym = ymKey();
+      const now = new Date().toISOString();
+      const db = getDb();
+      for (const s of suggestions) {
+        const existing = budgets.find((b) => b.categoryId === s.categoryId);
+        if (existing) {
+          await db.budgets.update(existing.id, {
+            allocatedPoisha: s.suggestedPoisha,
+            updatedAt: now,
+          });
+        } else {
+          const rec = {
+            id: uuid(),
+            userId,
+            ym,
+            categoryId: s.categoryId,
+            allocatedPoisha: s.suggestedPoisha,
+            carryPoisha: 0,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await db.budgets.put(rec as never);
+          await enqueueSync("budgets", rec.id, "upsert", {
+            id: rec.id,
+            ym_char6: ym,
+            category_id: s.categoryId,
+            allocated_poisha: s.suggestedPoisha,
+            carry_poisha: 0,
+          });
+        }
       }
+      await load();
+      toast(t("suggestionsApplied"), "success");
+    } finally {
+      setIsApplyingSuggestions(false);
     }
-    await load();
-    toast(t("suggestionsApplied"), "success");
   }
 
   function startEdit(b: Budget) {
@@ -168,20 +188,25 @@ export default function BudgetsPage() {
       return;
     }
     if (!userId) return;
-    const db = getDb();
-    const now = new Date().toISOString();
-    const poisha = toMinor(amount);
-    await db.budgets.update(b.id, { allocatedPoisha: poisha, updatedAt: now });
-    await enqueueSync("budgets", b.id, "upsert", {
-      id: b.id,
-      ym_char6: b.ym,
-      category_id: b.categoryId,
-      allocated_poisha: poisha,
-      carry_poisha: b.carryPoisha ?? 0,
-    });
-    setEditingId(null);
-    await load();
-    toast(t("budgetUpdated"), "success");
+    setSavingEditId(b.id);
+    try {
+      const db = getDb();
+      const now = new Date().toISOString();
+      const poisha = toMinor(amount);
+      await db.budgets.update(b.id, { allocatedPoisha: poisha, updatedAt: now });
+      await enqueueSync("budgets", b.id, "upsert", {
+        id: b.id,
+        ym_char6: b.ym,
+        category_id: b.categoryId,
+        allocated_poisha: poisha,
+        carry_poisha: b.carryPoisha ?? 0,
+      });
+      setEditingId(null);
+      await load();
+      toast(t("budgetUpdated"), "success");
+    } finally {
+      setSavingEditId(null);
+    }
   }
 
   function cancelEdit() {
@@ -200,19 +225,24 @@ export default function BudgetsPage() {
       variant: "destructive",
     });
     if (!ok) return;
-    const db = getDb();
-    const now = new Date().toISOString();
-    await db.budgets.update(b.id, { deletedAt: now, updatedAt: now });
-    await enqueueSync("budgets", b.id, "upsert", {
-      id: b.id,
-      ym_char6: b.ym,
-      category_id: b.categoryId,
-      allocated_poisha: b.allocatedPoisha,
-      carry_poisha: b.carryPoisha ?? 0,
-      deleted_at: now,
-    });
-    await load();
-    toast(t("budgetDeleted", { name: catName }), "success");
+    setDeletingId(b.id);
+    try {
+      const db = getDb();
+      const now = new Date().toISOString();
+      await db.budgets.update(b.id, { deletedAt: now, updatedAt: now });
+      await enqueueSync("budgets", b.id, "upsert", {
+        id: b.id,
+        ym_char6: b.ym,
+        category_id: b.categoryId,
+        allocated_poisha: b.allocatedPoisha,
+        carry_poisha: b.carryPoisha ?? 0,
+        deleted_at: now,
+      });
+      await load();
+      toast(t("budgetDeleted", { name: catName }), "success");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function addBudget() {
@@ -233,32 +263,37 @@ export default function BudgetsPage() {
       return;
     }
 
-    const db = getDb();
-    const ym = ymKey();
-    const now = new Date().toISOString();
-    const rec = {
-      id: uuid(),
-      userId,
-      ym,
-      categoryId: newCategoryId,
-      allocatedPoisha: toMinor(amount),
-      carryPoisha: 0,
-      createdAt: now,
-      updatedAt: now,
-    } as Budget;
-    await db.budgets.put(rec as never);
-    await enqueueSync("budgets", rec.id, "upsert", {
-      id: rec.id,
-      ym_char6: ym,
-      category_id: rec.categoryId,
-      allocated_poisha: rec.allocatedPoisha,
-      carry_poisha: 0,
-    });
-    setAdding(false);
-    setNewCategoryId("");
-    setNewAmountBdt("");
-    await load();
-    toast(t("budgetAdded"), "success");
+    setIsSubmittingBudget(true);
+    try {
+      const db = getDb();
+      const ym = ymKey();
+      const now = new Date().toISOString();
+      const rec = {
+        id: uuid(),
+        userId,
+        ym,
+        categoryId: newCategoryId,
+        allocatedPoisha: toMinor(amount),
+        carryPoisha: 0,
+        createdAt: now,
+        updatedAt: now,
+      } as Budget;
+      await db.budgets.put(rec as never);
+      await enqueueSync("budgets", rec.id, "upsert", {
+        id: rec.id,
+        ym_char6: ym,
+        category_id: rec.categoryId,
+        allocated_poisha: rec.allocatedPoisha,
+        carry_poisha: 0,
+      });
+      setAdding(false);
+      setNewCategoryId("");
+      setNewAmountBdt("");
+      await load();
+      toast(t("budgetAdded"), "success");
+    } finally {
+      setIsSubmittingBudget(false);
+    }
   }
 
   if (!loaded) {
@@ -280,13 +315,23 @@ export default function BudgetsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("budgetHealth")}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("budgetHealthSubtitle")}</p>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end gap-2 mb-2">
-              <span className="text-3xl font-bold">{health}</span>
-              <span className="text-muted-foreground">/ 100</span>
-            </div>
-            <Progress value={health} />
+            {budgets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("noBudgetsHealth")}</p>
+            ) : (
+              <>
+                <div className="flex items-end gap-2 mb-2">
+                  <span className="text-3xl font-bold">{health}</span>
+                  <span className="text-muted-foreground">/ 100</span>
+                </div>
+                <Progress value={health} color={budgetHealthColor(health)} />
+                <p className="text-xs text-muted-foreground mt-2">
+                  {t(`budgetHealthLevel_${budgetHealthLevel(health)}` as "budgetHealthLevel_Excellent")}
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -294,6 +339,7 @@ export default function BudgetsPage() {
           className="w-full"
           variant="secondary"
           onClick={applySuggestions}
+          loading={isApplyingSuggestions}
         >
           {t("applySuggestedBudgets")}
         </Button>
@@ -351,7 +397,7 @@ export default function BudgetsPage() {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={addBudget}>{t("add")}</Button>
+                    <Button onClick={addBudget} loading={isSubmittingBudget}>{t("add")}</Button>
                     <Button
                       variant="ghost"
                       onClick={() => {
@@ -404,7 +450,7 @@ export default function BudgetsPage() {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={addBudget}>{t("add")}</Button>
+                    <Button onClick={addBudget} loading={isSubmittingBudget}>{t("add")}</Button>
                     <Button
                       variant="ghost"
                       onClick={() => {
@@ -456,7 +502,7 @@ export default function BudgetsPage() {
                           />
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => saveEdit(b)}>
+                          <Button size="sm" onClick={() => saveEdit(b)} loading={savingEditId === b.id}>
                             {t("save")}
                           </Button>
                           <Button
@@ -481,6 +527,7 @@ export default function BudgetsPage() {
                           size="sm"
                           variant="destructive"
                           onClick={() => deleteBudget(b)}
+                          loading={deletingId === b.id}
                         >
                           {t("delete")}
                         </Button>

@@ -208,7 +208,7 @@ export function TransactionForm({
         <Input value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
 
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full" loading={loading}>
         {submitLabel}
       </Button>
       {extraAction}

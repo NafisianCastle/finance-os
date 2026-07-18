@@ -189,6 +189,10 @@ export function aggregateSmartBuy(
         };
 
   const reasonCodes = [...new Set(outcomes.flatMap((o) => o.reasonCodes))];
+  const reasonMetadata = outcomes.reduce<Record<string, number | string>>(
+    (acc, o) => ({ ...acc, ...o.metadata }),
+    {}
+  );
 
   return {
     affordabilityScore: score,
@@ -198,6 +202,7 @@ export function aggregateSmartBuy(
     safePriceMinPoisha: safeRange.min,
     safePriceMaxPoisha: safeRange.max,
     reasonCodes,
+    reasonMetadata,
     hardUnsafe,
   };
 }

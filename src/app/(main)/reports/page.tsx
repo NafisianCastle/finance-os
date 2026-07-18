@@ -148,6 +148,7 @@ export default function ReportsPage() {
   const [exportYear, setExportYear] = useState(() => String(new Date().getFullYear()));
   const [exportStart, setExportStart] = useState(() => format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [exportEnd, setExportEnd] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -229,55 +230,60 @@ export default function ReportsPage() {
 
   async function handleExportCSV() {
     if (!userId) return;
-    const db = getDb();
-    let txs = await db.transactions
-      .where("userId")
-      .equals(userId)
-      .filter((t) => !t.deletedAt)
-      .toArray();
+    setIsExporting(true);
+    try {
+      const db = getDb();
+      let txs = await db.transactions
+        .where("userId")
+        .equals(userId)
+        .filter((t) => !t.deletedAt)
+        .toArray();
 
-    let suffix = "all";
-    if (exportScope === "month") {
-      const [y, m] = exportMonth.split("-").map(Number);
-      const start = new Date(y, m - 1, 1);
-      const end = endOfMonth(start);
-      txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
-      suffix = exportMonth;
-    } else if (exportScope === "year") {
-      const y = Number(exportYear);
-      const start = startOfYear(new Date(y, 0, 1));
-      const end = endOfYear(start);
-      txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
-      suffix = exportYear;
-    } else if (exportScope === "custom") {
-      const a = parseISO(exportStart);
-      const b = parseISO(exportEnd);
-      const start = a <= b ? a : b;
-      const end = a <= b ? b : a;
-      txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
-      suffix = `${exportStart}_to_${exportEnd}`;
-    } else {
-      suffix = format(new Date(), "yyyy-MM-dd");
+      let suffix = "all";
+      if (exportScope === "month") {
+        const [y, m] = exportMonth.split("-").map(Number);
+        const start = new Date(y, m - 1, 1);
+        const end = endOfMonth(start);
+        txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
+        suffix = exportMonth;
+      } else if (exportScope === "year") {
+        const y = Number(exportYear);
+        const start = startOfYear(new Date(y, 0, 1));
+        const end = endOfYear(start);
+        txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
+        suffix = exportYear;
+      } else if (exportScope === "custom") {
+        const a = parseISO(exportStart);
+        const b = parseISO(exportEnd);
+        const start = a <= b ? a : b;
+        const end = a <= b ? b : a;
+        txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
+        suffix = `${exportStart}_to_${exportEnd}`;
+      } else {
+        suffix = format(new Date(), "yyyy-MM-dd");
+      }
+
+      const header = `Date,Type,Category,Amount (${currencyCode}),Account,Merchant,Note`;
+      const rows = txs
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map((t) => {
+          const type = t.type === TX_TYPES.INCOME ? "Income" : t.type === TX_TYPES.EXPENSE ? "Expense" : "Transfer";
+          const amount = (toMajor(t.amountPoisha)).toFixed(2);
+          return [
+            t.date,
+            type,
+            t.categoryId,
+            amount,
+            t.accountId,
+            t.merchant ?? "",
+            (t.note ?? "").replace(/,/g, ";"),
+          ].join(",");
+        });
+      const csv = [header, ...rows].join("\n");
+      downloadCSV(csv, `finance-os-transactions-${suffix}.csv`);
+    } finally {
+      setIsExporting(false);
     }
-
-    const header = `Date,Type,Category,Amount (${currencyCode}),Account,Merchant,Note`;
-    const rows = txs
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .map((t) => {
-        const type = t.type === TX_TYPES.INCOME ? "Income" : t.type === TX_TYPES.EXPENSE ? "Expense" : "Transfer";
-        const amount = (toMajor(t.amountPoisha)).toFixed(2);
-        return [
-          t.date,
-          type,
-          t.categoryId,
-          amount,
-          t.accountId,
-          t.merchant ?? "",
-          (t.note ?? "").replace(/,/g, ";"),
-        ].join(",");
-      });
-    const csv = [header, ...rows].join("\n");
-    downloadCSV(csv, `finance-os-transactions-${suffix}.csv`);
   }
 
   const monthLabel = format(selectedMonth, "MMMM yyyy");
@@ -531,7 +537,7 @@ export default function ReportsPage() {
               </div>
             )}
 
-            <Button variant="outline" className="w-full gap-2" onClick={() => handleExportCSV()}>
+            <Button variant="outline" className="w-full gap-2" onClick={() => handleExportCSV()} loading={isExporting}>
               <Download className="h-4 w-4" />
               {t("downloadCsv")}
             </Button>

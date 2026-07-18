@@ -106,7 +106,8 @@ export default function SignupPage() {
           <Button
             className="w-full"
             onClick={handleSignup}
-            disabled={loading || !email || !password}
+            disabled={!email || !password}
+            loading={loading}
           >
             {loading ? t("creatingAccount") : t("signUp")}
           </Button>

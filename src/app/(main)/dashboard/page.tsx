@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { HealthCard } from "@/components/health-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAppStore } from "@/store/app-store";
@@ -25,10 +26,6 @@ const IncomeExpenseTrendChart = dynamic(
 );
 const SpendBreakdownChart = dynamic(
   () => import("@/components/charts/dashboard-charts").then((m) => m.SpendBreakdownChart),
-  { ssr: false }
-);
-const MaturityBreakdownChart = dynamic(
-  () => import("@/components/charts/dashboard-charts").then((m) => m.MaturityBreakdownChart),
   { ssr: false }
 );
 
@@ -53,6 +50,21 @@ export default function DashboardPage() {
     goals: t("maturityGoals"),
     impulse: t("maturityImpulse"),
   };
+  const MATURITY_DESCRIPTIONS: Record<string, string> = {
+    budget: t("maturityBudgetDesc"),
+    savings: t("maturitySavingsDesc"),
+    debt: t("maturityDebtDesc"),
+    smartBuy: t("maturitySmartBuyDesc"),
+    goals: t("maturityGoalsDesc"),
+    impulse: t("maturityImpulseDesc"),
+  };
+  const MATURITY_LEVEL_DESC: Record<string, string> = {
+    Poor: t("maturityLevelDesc_Poor"),
+    Improving: t("maturityLevelDesc_Improving"),
+    Stable: t("maturityLevelDesc_Stable"),
+    Disciplined: t("maturityLevelDesc_Disciplined"),
+    "Wealth Builder": t("maturityLevelDesc_Wealth Builder"),
+  };
   const userId = useAppStore((s) => s.userId);
   const setNotifications = useNotificationStore((s) => s.setNotifications);
   const notifications = useNotificationStore((s) => s.notifications);
@@ -74,10 +86,12 @@ export default function DashboardPage() {
   const maturityBreakdown = useMemo(() => {
     if (!metrics) return [];
     return Object.entries(metrics.maturity.components).map(([key, value]) => ({
+      key,
       name: MATURITY_LABELS[key] ?? key,
+      description: MATURITY_DESCRIPTIONS[key] ?? "",
       value,
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- MATURITY_LABELS is a fresh object literal every render; t is its real dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- MATURITY_LABELS/MATURITY_DESCRIPTIONS are fresh object literals every render; t is their real dependency
   }, [metrics, t]);
 
   useEffect(() => {
@@ -184,14 +198,21 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">{t("financialMaturity")}</CardTitle>
+            <div>
+              <CardTitle className="text-base">{t("financialMaturity")}</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("maturitySubtitle")}</p>
+            </div>
             <Badge variant="secondary">{maturity.level}</Badge>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <div className="flex items-end gap-2">
               <span className="text-3xl font-bold">{maturity.score}</span>
               <span className="text-muted-foreground pb-1">/ 100</span>
             </div>
+            <Progress value={maturity.score} color={maturityColor(maturity.score)} />
+            <p className="text-xs text-muted-foreground">
+              {MATURITY_LEVEL_DESC[maturity.level] ?? ""}
+            </p>
           </CardContent>
         </Card>
 
@@ -235,9 +256,19 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("maturityBreakdown")}</CardTitle>
+            <p className="text-xs text-muted-foreground">{t("maturityBreakdownDesc")}</p>
           </CardHeader>
-          <CardContent style={{ height: maturityBreakdown.length * 32 + 8 }}>
-            <MaturityBreakdownChart data={maturityBreakdown} colorFor={maturityColor} />
+          <CardContent className="space-y-3">
+            {maturityBreakdown.map((item) => (
+              <div key={item.key} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium">{item.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{Math.round(item.value)} / 100</span>
+                </div>
+                <Progress value={item.value} color={maturityColor(item.value)} />
+                <p className="text-xs text-muted-foreground">{item.description}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
 

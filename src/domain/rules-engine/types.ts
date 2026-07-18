@@ -50,6 +50,7 @@ export interface SmartBuyResult {
   safePriceMinPoisha: number;
   safePriceMaxPoisha: number;
   reasonCodes: ReasonCode[];
+  reasonMetadata: Record<string, number | string>;
   hardUnsafe: boolean;
 }
 

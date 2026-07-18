@@ -19,6 +19,7 @@ export default function EditTransactionPage() {
   const params = useParams<{ id: string }>();
   const userId = useAppStore((s) => s.userId);
   const [tx, setTx] = useState<Transaction | null | undefined>(undefined);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!userId || !params.id) return;
@@ -30,8 +31,13 @@ export default function EditTransactionPage() {
   async function handleDelete() {
     if (!userId || !tx) return;
     if (!window.confirm(tList("deleteConfirm"))) return;
-    await deleteTransaction(userId, tx.id);
-    router.push("/transactions");
+    setIsDeleting(true);
+    try {
+      await deleteTransaction(userId, tx.id);
+      router.push("/transactions");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   if (tx === undefined) return <AppShell title={t("editTitle")}>{null}</AppShell>;
@@ -48,7 +54,13 @@ export default function EditTransactionPage() {
           router.push("/transactions");
         }}
         extraAction={
-          <Button type="button" variant="outline" className="w-full text-destructive" onClick={handleDelete}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full text-destructive"
+            onClick={handleDelete}
+            loading={isDeleting}
+          >
             <Trash2 className="h-4 w-4" />
             {tList("delete")}
           </Button>

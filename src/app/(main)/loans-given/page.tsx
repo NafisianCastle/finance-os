@@ -31,6 +31,8 @@ export default function LoansGivenPage() {
   const [repayingId, setRepayingId] = useState<string | null>(null);
   const [repayAmount, setRepayAmount] = useState("");
   const [repayAccountId, setRepayAccountId] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const [isRepaying, setIsRepaying] = useState(false);
 
   async function load() {
     if (!userId) return;
@@ -56,40 +58,50 @@ export default function LoansGivenPage() {
     if (!userId || !repayAccountId) return;
     const poisha = toMinor(parseFloat(repayAmount) || 0);
     if (poisha <= 0) return;
-    await recoverLoanGiven(userId, loan, poisha, repayAccountId);
-    setRepayingId(null);
-    setRepayAmount("");
-    toast(t("repaymentRecorded"), "success");
-    load();
+    setIsRepaying(true);
+    try {
+      await recoverLoanGiven(userId, loan, poisha, repayAccountId);
+      setRepayingId(null);
+      setRepayAmount("");
+      toast(t("repaymentRecorded"), "success");
+      load();
+    } finally {
+      setIsRepaying(false);
+    }
   }
 
   async function addLoan() {
     if (!userId) return;
-    const poisha = toMinor(parseFloat(amount) || 0);
-    const now = new Date().toISOString();
-    const l: LoanGiven = {
-      id: uuid(),
-      userId,
-      borrower,
-      amountPoisha: poisha,
-      remainingPoisha: poisha,
-      borrowDate: now.slice(0, 10),
-      status: LOAN_STATUS.ACTIVE,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await getDb().loansGiven.put(l as never);
-    await enqueueSync("loans_given", l.id, "upsert", {
-      id: l.id,
-      borrower: l.borrower,
-      amount_poisha: poisha,
-      remaining_poisha: poisha,
-      borrow_date: l.borrowDate,
-      status_smallint: 1,
-    });
-    setBorrower("");
-    setAmount("");
-    load();
+    setIsAdding(true);
+    try {
+      const poisha = toMinor(parseFloat(amount) || 0);
+      const now = new Date().toISOString();
+      const l: LoanGiven = {
+        id: uuid(),
+        userId,
+        borrower,
+        amountPoisha: poisha,
+        remainingPoisha: poisha,
+        borrowDate: now.slice(0, 10),
+        status: LOAN_STATUS.ACTIVE,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await getDb().loansGiven.put(l as never);
+      await enqueueSync("loans_given", l.id, "upsert", {
+        id: l.id,
+        borrower: l.borrower,
+        amount_poisha: poisha,
+        remaining_poisha: poisha,
+        borrow_date: l.borrowDate,
+        status_smallint: 1,
+      });
+      setBorrower("");
+      setAmount("");
+      load();
+    } finally {
+      setIsAdding(false);
+    }
   }
 
   const statusLabel: Record<number, string> = {
@@ -111,7 +123,7 @@ export default function LoansGivenPage() {
               <Label>{t("amountLabel", { currency: currencyCode })}</Label>
               <AmountInput value={amount} onChange={setAmount} />
             </div>
-            <Button onClick={addLoan} className="w-full">{t("addLoan")}</Button>
+            <Button onClick={addLoan} className="w-full" loading={isAdding}>{t("addLoan")}</Button>
           </CardContent>
         </Card>
         {loans.map((l) => (
@@ -144,7 +156,7 @@ export default function LoansGivenPage() {
                       </select>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={() => submitRepay(l)} className="flex-1">{t("confirm")}</Button>
+                      <Button onClick={() => submitRepay(l)} className="flex-1" loading={isRepaying}>{t("confirm")}</Button>
                       <Button variant="outline" onClick={() => setRepayingId(null)} className="flex-1">
                         {t("cancel")}
                       </Button>

@@ -85,39 +85,3 @@ export function SpendBreakdownChart({
     </ResponsiveContainer>
   );
 }
-
-export function MaturityBreakdownChart({
-  data,
-  colorFor,
-}: {
-  data: { name: string; value: number }[];
-  colorFor: (score: number) => string;
-}) {
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 32, bottom: 0, left: 0 }}>
-        <XAxis type="number" domain={[0, 100]} hide />
-        <YAxis
-          type="category"
-          dataKey="name"
-          width={90}
-          tick={{ fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-        />
-        <Tooltip formatter={(v: number) => `${v} / 100`} />
-        <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={14}>
-          {data.map((entry) => (
-            <Cell key={entry.name} fill={colorFor(entry.value)} />
-          ))}
-          <LabelList
-            dataKey="value"
-            position="right"
-            formatter={(v: number) => `${v}`}
-            style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
-          />
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
