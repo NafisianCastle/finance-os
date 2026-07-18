@@ -174,7 +174,7 @@ export function aggregateSmartBuy(
     .reduce((sum, p) => sum + p * 0.3, 0);
   const totalPenalty = Math.min(100, maxPenalty + restPenalty);
   const impulseBoost = input.priority === PRIORITY.IMPULSE ? 10 : 0;
-  const score = Math.max(0, Math.min(100, 100 - totalPenalty - impulseBoost));
+  const score = Math.round(Math.max(0, Math.min(100, 100 - totalPenalty - impulseBoost)));
   const income = Math.max(ctx.monthlyIncomePoisha, 1);
   const surplus = Math.max(income - ctx.monthlyExpensesPoisha - ctx.monthlyDebtServicePoisha, 1);
   const saveMonths = Math.ceil(input.pricePoisha / surplus);

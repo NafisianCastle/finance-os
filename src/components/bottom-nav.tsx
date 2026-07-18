@@ -19,7 +19,7 @@ export function BottomNav() {
   const t = useTranslations("Nav");
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-      <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-safe pt-2">
+      <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-safe pt-2 md:max-w-2xl">
         {links.map(({ href, key, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (

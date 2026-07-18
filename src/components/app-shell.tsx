@@ -10,7 +10,7 @@ import { UnsyncedWarningBanner } from "./unsynced-warning-banner";
 export function AppShell({ children, title }: { children: React.ReactNode; title?: string }) {
   const t = useTranslations("Common");
   return (
-    <div className="mx-auto min-h-screen max-w-md pb-24">
+    <div className="mx-auto min-h-screen max-w-md pb-24 md:max-w-2xl">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold tracking-tight">{title ?? t("appName")}</h1>
