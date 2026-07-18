@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getDb, resetLocalDatabase } from "@/infrastructure/db/dexie/database";
 import { getDashboardMetrics } from "@/application/analytics";
 import { TX_TYPES } from "@/lib/constants";
+import { ymKey } from "@/lib/utils";
 import type { Account, Transaction, Debt } from "@/infrastructure/db/dexie/schema";
 
 const USER_ID = "user-1";
@@ -118,11 +119,10 @@ describe("getDashboardMetrics", () => {
       updatedAt: now,
     };
     await getDb().userProfiles.put(profile as never);
-    const ym = new Date().toISOString().slice(0, 7);
     const budget = {
       id: "b1",
       userId: USER_ID,
-      ym,
+      ym: ymKey(),
       categoryId: "food",
       allocatedPoisha: 10_000,
       carryPoisha: 0,
