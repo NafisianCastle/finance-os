@@ -143,6 +143,8 @@
     "maturityLevelDesc_Disciplined": "সব ক্ষেত্রেই শক্তিশালী অভ্যাস — চমৎকার।",
     "maturityLevelDesc_Wealth Builder": "চমৎকার — আপনার অভ্যাস দীর্ঘমেয়াদী সম্পদের জন্য প্রস্তুত।",
     "maturityBreakdownDesc": "আপনার স্কোর যেভাবে তৈরি হয়েছে। বেশি মানে ভালো।",
+    "maturityPartialData": "{total}টির মধ্যে {measured}টি ক্ষেত্রের ভিত্তিতে — বাকিগুলো স্কোর করতে আরও কার্যকলাপ দরকার।",
+    "noDataYet": "পর্যাপ্ত তথ্য নেই",
     "maturityBudgetDesc": "নির্ধারিত বাজেটের মধ্যে থাকা",
     "maturitySavingsDesc": "নিয়মিত কিছু না কিছু সঞ্চয় করা",
     "maturityDebtDesc": "ঋণ কম রাখা ও সময়মতো পরিশোধ করা",

@@ -143,12 +143,14 @@
     "maturityLevelDesc_Disciplined": "Strong habits across the board — nice work.",
     "maturityLevelDesc_Wealth Builder": "Excellent — your habits are set up for long-term wealth.",
     "maturityBreakdownDesc": "What makes up your score. Higher is better.",
+    "maturityPartialData": "Based on {measured} of {total} areas — the rest need more activity before they can be scored.",
+    "noDataYet": "Not enough data",
     "maturityBudgetDesc": "Staying within the budgets you set",
     "maturitySavingsDesc": "Saving something on a regular basis",
     "maturityDebtDesc": "Keeping debts low and paid on time",
     "maturitySmartBuyDesc": "Following Smart Buy advice before big purchases",
     "maturityGoalsDesc": "Making progress toward your savings goals",
-    "maturityImpulseDesc": "Avoiding unplanned, impulsive spending"
+    "maturityImpulseDesc": "Share of Smart Buy checks that weren't marked as impulse buys"
   },
   "Transactions": {
     "title": "Activity",

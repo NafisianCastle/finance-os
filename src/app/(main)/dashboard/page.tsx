@@ -213,6 +213,11 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">
               {MATURITY_LEVEL_DESC[maturity.level] ?? ""}
             </p>
+            {maturity.measuredCount < maturity.totalCount && (
+              <p className="text-xs text-muted-foreground">
+                {t("maturityPartialData", { measured: maturity.measuredCount, total: maturity.totalCount })}
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -263,9 +268,11 @@ export default function DashboardPage() {
               <div key={item.key} className="space-y-1">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-medium">{item.name}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">{Math.round(item.value)} / 100</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {item.value === null ? t("noDataYet") : `${Math.round(item.value)} / 100`}
+                  </span>
                 </div>
-                <Progress value={item.value} color={maturityColor(item.value)} />
+                <Progress value={item.value ?? 0} color={item.value === null ? "hsl(var(--muted-foreground))" : maturityColor(item.value)} />
                 <p className="text-xs text-muted-foreground">{item.description}</p>
               </div>
             ))}

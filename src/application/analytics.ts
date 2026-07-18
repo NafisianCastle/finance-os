@@ -1,5 +1,5 @@
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { TX_TYPES, HELD_STATUS, LOAN_STATUS } from "@/lib/constants";
+import { TX_TYPES, HELD_STATUS, LOAN_STATUS, PRIORITY } from "@/lib/constants";
 import { calculateNetWorth } from "@/domain/rules-engine/net-worth.rules";
 import { forecastCashflow } from "@/domain/rules-engine/cashflow.rules";
 import { computeMaturityScore } from "@/domain/rules-engine/maturity.rules";
@@ -72,11 +72,15 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
 
   const unsafeBuys = buyEvals.filter((e) => e.tier >= 5).length;
   const smartBuyDiscipline =
-    buyEvals.length > 0 ? Math.round((1 - unsafeBuys / buyEvals.length) * 100) : 70;
+    buyEvals.length > 0 ? Math.round((1 - unsafeBuys / buyEvals.length) * 100) : null;
+
+  const impulseBuys = buyEvals.filter((e) => e.priority === PRIORITY.IMPULSE).length;
+  const impulseControl =
+    buyEvals.length > 0 ? Math.round((1 - impulseBuys / buyEvals.length) * 100) : null;
 
   const maturity = computeMaturityScore({
-    budgetAdherencePct: budgetHealthScore(budgetAllocations),
-    savingsConsistencyPct: income > expense ? 75 : 40,
+    budgetAdherencePct: budgets.length > 0 ? budgetHealthScore(budgetAllocations) : null,
+    savingsConsistencyPct: income > 0 || expense > 0 ? (income > expense ? 75 : 40) : null,
     debtScorePct: netWorth.totalLiabilitiesPoisha < (profile?.monthlyIncomePoisha ?? 1) ? 70 : 45,
     smartBuyDisciplinePct: smartBuyDiscipline,
     goalProgressPct:
@@ -85,8 +89,8 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
             goals.reduce((s, g) => s + Math.min(100, (g.savedPoisha / g.targetPoisha) * 100), 0) /
               goals.length
           )
-        : 50,
-    impulseControlPct: 65,
+        : null,
+    impulseControlPct: impulseControl,
   });
 
   const threeDayBurn = expense > 0 ? Math.round(expense / 30) : 0;
