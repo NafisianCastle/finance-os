@@ -3,6 +3,7 @@
 import { addTransaction } from "@/application/transactions";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getDb } from "@/infrastructure/db/dexie/database";
@@ -124,14 +125,7 @@ export default function NewTransactionPage() {
 
         <div className="space-y-2">
           <Label>{t("amountLabel", { currency: currencyCode })}</Label>
-          <Input
-            type="number"
-            inputMode="decimal"
-            autoFocus
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-          />
+          <AmountInput autoFocus value={amount} onChange={setAmount} required />
         </div>
 
         <div className="space-y-2">

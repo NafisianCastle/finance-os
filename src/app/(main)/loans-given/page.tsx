@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -108,7 +109,7 @@ export default function LoansGivenPage() {
             </div>
             <div className="space-y-2">
               <Label>{t("amountLabel", { currency: currencyCode })}</Label>
-              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <AmountInput value={amount} onChange={setAmount} />
             </div>
             <Button onClick={addLoan} className="w-full">{t("addLoan")}</Button>
           </CardContent>
@@ -128,11 +129,7 @@ export default function LoansGivenPage() {
                   <div className="space-y-2 border-t pt-3">
                     <div className="space-y-2">
                       <Label>{t("amountReceivedLabel", { currency: currencyCode })}</Label>
-                      <Input
-                        type="number"
-                        value={repayAmount}
-                        onChange={(e) => setRepayAmount(e.target.value)}
-                      />
+                      <AmountInput value={repayAmount} onChange={setRepayAmount} />
                     </div>
                     <div className="space-y-2">
                       <Label>{t("depositInto")}</Label>

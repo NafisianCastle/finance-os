@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -363,11 +364,11 @@ export default function InvestmentsPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-2">
                   <Label>{UNIT_LABEL[type]}</Label>
-                  <Input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={t("quantityPlaceholder")} />
+                  <AmountInput value={quantity} onChange={setQuantity} placeholder={t("quantityPlaceholder")} />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("pricePerUnitLabel", { currency: currencyCode })}</Label>
-                  <Input type="number" value={pricePerUnit} onChange={(e) => setPricePerUnit(e.target.value)} />
+                  <AmountInput value={pricePerUnit} onChange={setPricePerUnit} />
                 </div>
               </div>
             )}
@@ -376,7 +377,7 @@ export default function InvestmentsPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-2">
                   <Label>{t("weightGramsLabel")}</Label>
-                  <Input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={t("weightPlaceholder")} />
+                  <AmountInput value={quantity} onChange={setQuantity} placeholder={t("weightPlaceholder")} />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("purityLabel")}</Label>
@@ -394,7 +395,7 @@ export default function InvestmentsPage() {
             {RATE_TYPES.has(type) && (
               <div className="space-y-2">
                 <Label>{t("interestRateLabel")}</Label>
-                <Input type="number" value={interestRatePct} onChange={(e) => setInterestRatePct(e.target.value)} placeholder={t("interestRatePlaceholder")} />
+                <AmountInput max={100} value={interestRatePct} onChange={setInterestRatePct} placeholder={t("interestRatePlaceholder")} />
               </div>
             )}
 
@@ -413,7 +414,7 @@ export default function InvestmentsPage() {
                     placeholder={t("autoFromQtyPrice")}
                   />
                 ) : (
-                  <Input type="number" value={invested} onChange={(e) => setInvested(e.target.value)} />
+                  <AmountInput value={invested} onChange={setInvested} />
                 )}
               </div>
               <div className="space-y-2">
@@ -436,10 +437,10 @@ export default function InvestmentsPage() {
                     ))}
                   </div>
                 </div>
-                <Input
-                  type="number"
+                <AmountInput
+                  max={declaredProfitMode === "percent" ? 100 : undefined}
                   value={declaredProfit}
-                  onChange={(e) => setDeclaredProfit(e.target.value)}
+                  onChange={setDeclaredProfit}
                   placeholder={declaredProfitMode === "percent" ? t("percentOfInvestedPlaceholder") : t("optionalPlaceholder")}
                 />
               </div>
@@ -589,15 +590,19 @@ export default function InvestmentsPage() {
                     ))}
                   </select>
                   <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      type="number"
+                    <AmountInput
+                      max={
+                        eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
+                          ? 100
+                          : undefined
+                      }
                       placeholder={
                         eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
                           ? t("percentOfInvestedPlaceholder")
                           : t("amountCurrencyPlaceholder", { currency: currencyCode })
                       }
                       value={eventAmount}
-                      onChange={(e) => setEventAmount(e.target.value)}
+                      onChange={setEventAmount}
                     />
                     <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
                   </div>

@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -371,13 +372,7 @@ export default function SettingsPage() {
           <CardContent className="pt-4 space-y-3">
             <div className="space-y-2">
               <Label htmlFor="income">{t("monthlyIncome", { currency: currencyCode })}</Label>
-              <Input
-                id="income"
-                type="number"
-                min={0}
-                value={income}
-                onChange={(e) => setIncome(e.target.value)}
-              />
+              <AmountInput id="income" value={income} onChange={setIncome} />
             </div>
             <Button
               onClick={saveProfile}
@@ -407,13 +402,11 @@ export default function SettingsPage() {
                 <div key={acc.id} className="flex items-end gap-2">
                   <div className="flex-1 space-y-1">
                     <Label htmlFor={`bal-${acc.id}`}>{acc.name}</Label>
-                    <Input
+                    <AmountInput
                       id={`bal-${acc.id}`}
-                      type="number"
-                      min={0}
                       value={balanceInputs[acc.id] ?? ""}
-                      onChange={(e) =>
-                        setBalanceInputs((prev) => ({ ...prev, [acc.id]: e.target.value }))
+                      onChange={(v) =>
+                        setBalanceInputs((prev) => ({ ...prev, [acc.id]: v }))
                       }
                     />
                   </div>
@@ -462,12 +455,10 @@ export default function SettingsPage() {
                 </select>
               </div>
               <div className="flex gap-2">
-                <Input
-                  type="number"
-                  min={0}
+                <AmountInput
                   placeholder={t("startingBalance", { currency: currencyCode })}
                   value={newAccountBalance}
-                  onChange={(e) => setNewAccountBalance(e.target.value)}
+                  onChange={setNewAccountBalance}
                   className="flex-1"
                 />
                 <Button

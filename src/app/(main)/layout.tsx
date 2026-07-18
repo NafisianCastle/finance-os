@@ -17,8 +17,11 @@ export default function MainLayout({
   const router = useRouter();
   const pathname = usePathname();
   const userId = useAppStore((s) => s.userId);
+  const hasHydrated = useAppStore((s) => s.hasHydrated);
 
   useEffect(() => {
+    if (!hasHydrated) return; // wait for persisted userId to load from localStorage first
+
     const allowUnauthenticated = ["/onboarding", "/login", "/signup"];
     const authConfigured = isSupabaseConfigured();
 
@@ -47,7 +50,7 @@ export default function MainLayout({
     }
 
     checkOnboarding();
-  }, [userId, pathname, router]);
+  }, [userId, pathname, router, hasHydrated]);
 
   return (
     <>

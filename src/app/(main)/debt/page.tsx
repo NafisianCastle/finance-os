@@ -6,6 +6,7 @@ import { v4 as uuid } from "uuid";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -181,14 +182,14 @@ export default function DebtPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <Label>{t("amountLabel", { currency: currencyCode })}</Label>
-                <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                <AmountInput value={amount} onChange={setAmount} />
               </div>
               <div className="space-y-2">
                 <Label>{t("interestRate")}</Label>
-                <Input
-                  type="number"
+                <AmountInput
+                  max={100}
                   value={interestRate}
-                  onChange={(e) => setInterestRate(e.target.value)}
+                  onChange={setInterestRate}
                   placeholder={t("optional")}
                 />
               </div>
@@ -233,11 +234,7 @@ export default function DebtPage() {
                     <div className="space-y-2 border-t pt-3">
                       <div className="space-y-2">
                         <Label>{t("amountPaidLabel", { currency: currencyCode })}</Label>
-                        <Input
-                          type="number"
-                          value={repayAmount}
-                          onChange={(e) => setRepayAmount(e.target.value)}
-                        />
+                        <AmountInput value={repayAmount} onChange={setRepayAmount} />
                       </div>
                       <div className="space-y-2">
                         <Label>{t("payFrom")}</Label>

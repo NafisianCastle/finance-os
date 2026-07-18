@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -342,13 +343,10 @@ export default function BudgetsPage() {
                   </div>
                   <div>
                     <Label htmlFor="amt-input">{t("amountLabel", { currency: currencyCode })}</Label>
-                    <Input
+                    <AmountInput
                       id="amt-input"
-                      type="number"
-                      min="0"
-                      step="1"
                       value={newAmountBdt}
-                      onChange={(e) => setNewAmountBdt(e.target.value)}
+                      onChange={setNewAmountBdt}
                       placeholder={t("enterAmount")}
                     />
                   </div>
@@ -398,13 +396,10 @@ export default function BudgetsPage() {
                   </div>
                   <div>
                     <Label htmlFor="amt-input-2">{t("amountLabel", { currency: currencyCode })}</Label>
-                    <Input
+                    <AmountInput
                       id="amt-input-2"
-                      type="number"
-                      min="0"
-                      step="1"
                       value={newAmountBdt}
-                      onChange={(e) => setNewAmountBdt(e.target.value)}
+                      onChange={setNewAmountBdt}
                       placeholder={t("enterAmount")}
                     />
                   </div>
@@ -454,13 +449,10 @@ export default function BudgetsPage() {
                       <div className="space-y-2">
                         <div>
                           <Label htmlFor={`amt-${b.id}`}>{t("allocatedLabel", { currency: currencyCode })}</Label>
-                          <Input
+                          <AmountInput
                             id={`amt-${b.id}`}
-                            type="number"
-                            min="0"
-                            step="1"
                             value={editAmountBdt}
-                            onChange={(e) => setEditAmountBdt(e.target.value)}
+                            onChange={setEditAmountBdt}
                           />
                         </div>
                         <div className="flex gap-2">

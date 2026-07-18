@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -86,7 +87,7 @@ export default function GoalsPage() {
             </div>
             <div className="space-y-2">
               <Label>{t("targetLabel", { currency: currencyCode })}</Label>
-              <Input type="number" value={target} onChange={(e) => setTarget(e.target.value)} />
+              <AmountInput value={target} onChange={setTarget} />
             </div>
             <Button onClick={addGoal} className="w-full" disabled={adding}>
               {adding && <Loader2 className="h-4 w-4 animate-spin" />}

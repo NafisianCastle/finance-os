@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { evaluateSmartBuy } from "@/domain/rules-engine/evaluate";
@@ -185,12 +186,7 @@ export default function SmartBuyPage() {
         </div>
         <div className="space-y-2">
           <Label>{t("priceLabel", { currency: currencyCode })}</Label>
-          <Input
-            type="number"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="120000"
-          />
+          <AmountInput value={price} onChange={setPrice} placeholder="120000" />
         </div>
         <div className="space-y-2">
           <Label>{t("priorityLabel")}</Label>

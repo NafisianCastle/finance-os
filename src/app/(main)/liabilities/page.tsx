@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAppStore } from "@/store/app-store";
@@ -98,7 +99,7 @@ export default function LiabilitiesPage() {
             </div>
             <div className="space-y-2">
               <Label>{t("amountLabel", { currency: currencyCode })}</Label>
-              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <AmountInput value={amount} onChange={setAmount} />
             </div>
             <div className="space-y-2">
               <Label>{t("purpose")}</Label>

@@ -3,7 +3,7 @@
 import { seedUserData } from "@/application/seed";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -79,11 +79,10 @@ export default function OnboardingPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="income">{t("monthlyIncome", { currency })}</Label>
-            <Input
+            <AmountInput
               id="income"
-              type="number"
               value={income}
-              onChange={(e) => setIncome(e.target.value)}
+              onChange={setIncome}
               placeholder="20000"
             />
           </div>
