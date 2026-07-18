@@ -205,7 +205,7 @@ export default function DashboardPage() {
             <Badge variant="secondary">{maturity.level}</Badge>
           </CardHeader>
           <CardContent className="space-y-2">
-            {maturity.measuredCount === 0 ? (
+            {maturity.measuredCount < 2 ? (
               <p className="text-sm text-muted-foreground">{t("maturityNoData")}</p>
             ) : (
               <>
@@ -216,10 +216,7 @@ export default function DashboardPage() {
                 <Progress value={maturity.score} color={maturityColor(maturity.score)} />
               </>
             )}
-            <p className="text-xs text-muted-foreground">
-              {MATURITY_LEVEL_DESC[maturity.level] ?? ""}
-            </p>
-            {maturity.measuredCount < maturity.totalCount && maturity.measuredCount > 0 && (
+            {maturity.measuredCount >= 2 && maturity.measuredCount < maturity.totalCount && (
               <p className="text-xs text-muted-foreground">
                 {t("maturityPartialData", { measured: maturity.measuredCount, total: maturity.totalCount })}
               </p>

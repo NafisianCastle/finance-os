@@ -104,6 +104,39 @@ describe("getDashboardMetrics", () => {
     expect(metrics.maturity.components.impulse).toBeNull();
   });
 
+  it("returns 100 budget score but only 1 measured component after applying suggested budgets with no other activity", async () => {
+    await getDb().accounts.put(account());
+    const profile = {
+      id: "p1",
+      userId: USER_ID,
+      monthlyIncomePoisha: 50_000,
+      currencyCode: "BDT",
+      locale: "en",
+      emergencyMonths: 3,
+      onboardingComplete: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().userProfiles.put(profile as never);
+    const ym = new Date().toISOString().slice(0, 7);
+    const budget = {
+      id: "b1",
+      userId: USER_ID,
+      ym,
+      categoryId: "food",
+      allocatedPoisha: 10_000,
+      carryPoisha: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().budgets.put(budget as never);
+
+    const metrics = await getDashboardMetrics(USER_ID);
+    expect(metrics.maturity.components.budget).toBe(100);
+    expect(metrics.maturity.measuredCount).toBe(1);
+    expect(metrics.maturity.totalCount).toBe(6);
+  });
+
   it("computes impulse control from impulse-tagged transactions when no buy evaluations exist", async () => {
     await getDb().accounts.put(account());
     const today = new Date().toISOString().slice(0, 10);
