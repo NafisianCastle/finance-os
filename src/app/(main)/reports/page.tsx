@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,21 @@ import { getDashboardMetrics } from "@/application/analytics";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import type { Transaction } from "@/infrastructure/db/dexie/schema";
 import { ymKey } from "@/lib/utils";
 import { TX_TYPES, SYSTEM_CATEGORIES } from "@/lib/constants";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   startOfMonth,
   endOfMonth,
+  startOfYear,
+  endOfYear,
   subMonths,
   parseISO,
   isWithinInterval,
@@ -21,24 +31,16 @@ import {
 } from "date-fns";
 import { Download, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Tooltip,
-  Cell,
-  LabelList,
-} from "recharts";
+import dynamic from "next/dynamic";
 
-const CATEGORY_COLORS = [
-  "oklch(var(--chart-1))",
-  "oklch(var(--chart-2))",
-  "oklch(var(--chart-3))",
-  "oklch(var(--chart-4))",
-  "oklch(var(--chart-5))",
-];
+const CategoryBreakdownChart = dynamic(
+  () => import("@/components/charts/reports-charts").then((m) => m.CategoryBreakdownChart),
+  { ssr: false }
+);
+const IncomeExpenseTrendChart = dynamic(
+  () => import("@/components/charts/reports-charts").then((m) => m.IncomeExpenseTrendChart),
+  { ssr: false }
+);
 
 interface SpendingPattern {
   moneyLeaks: { category: string; avgSpend: number; trend: "up" | "flat" | "down" }[];
@@ -50,13 +52,8 @@ function getCategoryName(id: string): string {
   return SYSTEM_CATEGORIES.find((c) => c.id === id)?.name ?? id;
 }
 
-async function analyzeSpendingPatterns(userId: string): Promise<SpendingPattern> {
-  const db = getDb();
-  const txs = await db.transactions
-    .where("userId")
-    .equals(userId)
-    .filter((t) => !t.deletedAt && t.type === TX_TYPES.EXPENSE)
-    .toArray();
+function analyzeSpendingPatterns(allTxs: Transaction[]): SpendingPattern {
+  const txs = allTxs.filter((t) => t.type === TX_TYPES.EXPENSE);
 
   // Build per-category monthly spend for last 3 months
   const months = [2, 1, 0].map((i) => ({
@@ -146,7 +143,11 @@ export default function ReportsPage() {
   } | null>(null);
   const [patterns, setPatterns] = useState<SpendingPattern | null>(null);
   const [trend, setTrend] = useState<{ month: string; income: number; expense: number }[]>([]);
-  const [exportMonth, setExportMonth] = useState(() => ymKey(new Date()));
+  const [exportScope, setExportScope] = useState<"month" | "year" | "custom" | "all">("month");
+  const [exportMonth, setExportMonth] = useState(() => format(new Date(), "yyyy-MM"));
+  const [exportYear, setExportYear] = useState(() => String(new Date().getFullYear()));
+  const [exportStart, setExportStart] = useState(() => format(startOfMonth(new Date()), "yyyy-MM-dd"));
+  const [exportEnd, setExportEnd] = useState(() => format(new Date(), "yyyy-MM-dd"));
 
   useEffect(() => {
     if (!userId) return;
@@ -195,8 +196,7 @@ export default function ReportsPage() {
       if (mistakes.length === 0) mistakes.push(t("noMajorIssues"));
       setSummary({ income, expense, savingsRatePct, byCategory, wins, mistakes });
 
-      const p = await analyzeSpendingPatterns(userId);
-      setPatterns(p);
+      setPatterns(analyzeSpendingPatterns(txs));
 
       const trendData: { month: string; income: number; expense: number }[] = [];
       for (let i = 5; i >= 0; i--) {
@@ -216,14 +216,18 @@ export default function ReportsPage() {
     })();
   }, [userId, selectedMonth, isCurrentMonth]);
 
-  const categoryBreakdown = summary
-    ? Object.entries(summary.byCategory)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 6)
-        .map(([id, value]) => ({ name: getCategoryName(id), value }))
-    : [];
+  const categoryBreakdown = useMemo(
+    () =>
+      summary
+        ? Object.entries(summary.byCategory)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6)
+            .map(([id, value]) => ({ name: getCategoryName(id), value }))
+        : [],
+    [summary]
+  );
 
-  async function handleExportCSV(scope: "all" | "month") {
+  async function handleExportCSV() {
     if (!userId) return;
     const db = getDb();
     let txs = await db.transactions
@@ -231,12 +235,31 @@ export default function ReportsPage() {
       .equals(userId)
       .filter((t) => !t.deletedAt)
       .toArray();
-    if (scope === "month") {
+
+    let suffix = "all";
+    if (exportScope === "month") {
       const [y, m] = exportMonth.split("-").map(Number);
       const start = new Date(y, m - 1, 1);
       const end = endOfMonth(start);
       txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
+      suffix = exportMonth;
+    } else if (exportScope === "year") {
+      const y = Number(exportYear);
+      const start = startOfYear(new Date(y, 0, 1));
+      const end = endOfYear(start);
+      txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
+      suffix = exportYear;
+    } else if (exportScope === "custom") {
+      const a = parseISO(exportStart);
+      const b = parseISO(exportEnd);
+      const start = a <= b ? a : b;
+      const end = a <= b ? b : a;
+      txs = txs.filter((t) => isWithinInterval(parseISO(t.date), { start, end }));
+      suffix = `${exportStart}_to_${exportEnd}`;
+    } else {
+      suffix = format(new Date(), "yyyy-MM-dd");
     }
+
     const header = `Date,Type,Category,Amount (${currencyCode}),Account,Merchant,Note`;
     const rows = txs
       .sort((a, b) => b.date.localeCompare(a.date))
@@ -254,7 +277,6 @@ export default function ReportsPage() {
         ].join(",");
       });
     const csv = [header, ...rows].join("\n");
-    const suffix = scope === "month" ? exportMonth : format(new Date(), "yyyy-MM-dd");
     downloadCSV(csv, `finance-os-transactions-${suffix}.csv`);
   }
 
@@ -325,35 +347,7 @@ export default function ReportsPage() {
               <CardTitle className="text-base">{t("spendByCategory", { month: monthLabel })}</CardTitle>
             </CardHeader>
             <CardContent style={{ height: categoryBreakdown.length * 36 + 8 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={categoryBreakdown}
-                  layout="vertical"
-                  margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
-                >
-                  <XAxis type="number" hide />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={90}
-                    tick={{ fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip formatter={(v: number) => formatMoney(v)} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
-                    {categoryBreakdown.map((entry, i) => (
-                      <Cell key={entry.name} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
-                    ))}
-                    <LabelList
-                      dataKey="value"
-                      position="right"
-                      formatter={(v: number) => formatMoney(v)}
-                      style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <CategoryBreakdownChart data={categoryBreakdown} formatMoney={formatMoney} />
             </CardContent>
           </Card>
         )}
@@ -364,18 +358,11 @@ export default function ReportsPage() {
               <CardTitle className="text-base">{t("incomeVsExpense")}</CardTitle>
             </CardHeader>
             <CardContent className="h-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trend}>
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                  <YAxis
-                    tickFormatter={(v) => `${Math.round(toMajor(v as number) / 1000)}k`}
-                    tick={{ fontSize: 10 }}
-                  />
-                  <Tooltip formatter={(v: number) => formatMoney(v)} />
-                  <Bar dataKey="income" fill="hsl(160 84% 32%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="expense" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <IncomeExpenseTrendChart
+                data={trend}
+                formatMoney={formatMoney}
+                formatAxisTick={(v) => `${Math.round(toMajor(v) / 1000)}k`}
+              />
             </CardContent>
           </Card>
         )}
@@ -490,22 +477,63 @@ export default function ReportsPage() {
             <CardTitle className="text-base">{t("exportData")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center gap-2">
+            <Select value={exportScope} onValueChange={(v) => setExportScope(v as typeof exportScope)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="month">{t("exportScopeMonth")}</SelectItem>
+                <SelectItem value="year">{t("exportScopeYear")}</SelectItem>
+                <SelectItem value="custom">{t("exportScopeCustom")}</SelectItem>
+                <SelectItem value="all">{t("exportScopeAll")}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {exportScope === "month" && (
               <input
                 type="month"
                 value={exportMonth}
-                max={ymKey(new Date())}
+                max={format(new Date(), "yyyy-MM")}
                 onChange={(e) => setExportMonth(e.target.value)}
-                className="flex h-10 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
               />
-              <Button variant="outline" className="gap-2 shrink-0" onClick={() => handleExportCSV("month")}>
-                <Download className="h-4 w-4" />
-                {t("exportMonth")}
-              </Button>
-            </div>
-            <Button variant="outline" className="w-full gap-2" onClick={() => handleExportCSV("all")}>
+            )}
+
+            {exportScope === "year" && (
+              <input
+                type="number"
+                value={exportYear}
+                min={2000}
+                max={new Date().getFullYear()}
+                onChange={(e) => setExportYear(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              />
+            )}
+
+            {exportScope === "custom" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={exportStart}
+                  max={exportEnd}
+                  onChange={(e) => setExportStart(e.target.value)}
+                  className="flex h-10 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
+                />
+                <span className="text-xs text-muted-foreground shrink-0">{t("exportRangeTo")}</span>
+                <input
+                  type="date"
+                  value={exportEnd}
+                  min={exportStart}
+                  max={format(new Date(), "yyyy-MM-dd")}
+                  onChange={(e) => setExportEnd(e.target.value)}
+                  className="flex h-10 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
+                />
+              </div>
+            )}
+
+            <Button variant="outline" className="w-full gap-2" onClick={() => handleExportCSV()}>
               <Download className="h-4 w-4" />
-              {t("exportAll")}
+              {t("downloadCsv")}
             </Button>
           </CardContent>
         </Card>

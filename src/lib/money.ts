@@ -1,12 +1,19 @@
+const formatterCache = new Map<string, Intl.NumberFormat>();
+
+function getCurrencyFormatter(locale: string, currencyCode: string): Intl.NumberFormat {
+  const key = `${locale}|${currencyCode}`;
+  let formatter = formatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, { style: "currency", currency: currencyCode });
+    formatterCache.set(key, formatter);
+  }
+  return formatter;
+}
+
 /** Number of minor-unit digits for a currency, e.g. 2 for USD/BDT, 0 for JPY, 3 for BHD */
 export function getCurrencyDigits(currencyCode: string): number {
   try {
-    return (
-      new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: currencyCode,
-      }).resolvedOptions().maximumFractionDigits ?? 2
-    );
+    return getCurrencyFormatter("en-US", currencyCode).resolvedOptions().maximumFractionDigits ?? 2;
   } catch {
     return 2;
   }
@@ -28,10 +35,7 @@ export function formatMoney(
   locale: string
 ): string {
   const amount = minorUnitsToMajor(minorUnits, currencyCode);
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: currencyCode,
-  }).format(amount);
+  return getCurrencyFormatter(locale, currencyCode).format(amount);
 }
 
 export function formatCompact(
@@ -41,7 +45,7 @@ export function formatCompact(
 ): string {
   const amount = minorUnitsToMajor(minorUnits, currencyCode);
   const symbol =
-    new Intl.NumberFormat(locale, { style: "currency", currency: currencyCode })
+    getCurrencyFormatter(locale, currencyCode)
       .formatToParts(0)
       .find((p) => p.type === "currency")?.value ?? currencyCode;
   if (Math.abs(amount) >= 1_000_000) return `${symbol}${(amount / 1_000_000).toFixed(1)}M`;

@@ -1,9 +1,10 @@
+import { useCallback } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { useAppStore } from "@/store/app-store";
 import {
   formatMoney,
-  formatCompact,
+  formatCompact as formatCompactMoney,
   majorToMinorUnits,
   minorUnitsToMajor,
 } from "@/lib/money";
@@ -22,13 +23,22 @@ export function useCurrencyFormatter() {
   const currencyCode = profile?.currencyCode ?? DEFAULT_CURRENCY;
   const locale = profile?.locale ?? DEFAULT_LOCALE;
 
-  return {
-    currencyCode,
-    locale,
-    format: (minorUnits: number) => formatMoney(minorUnits, currencyCode, locale),
-    formatCompact: (minorUnits: number) =>
-      formatCompact(minorUnits, currencyCode, locale),
-    toMinor: (amount: number) => majorToMinorUnits(amount, currencyCode),
-    toMajor: (minorUnits: number) => minorUnitsToMajor(minorUnits, currencyCode),
-  };
+  const format = useCallback(
+    (minorUnits: number) => formatMoney(minorUnits, currencyCode, locale),
+    [currencyCode, locale]
+  );
+  const formatCompact = useCallback(
+    (minorUnits: number) => formatCompactMoney(minorUnits, currencyCode, locale),
+    [currencyCode, locale]
+  );
+  const toMinor = useCallback(
+    (amount: number) => majorToMinorUnits(amount, currencyCode),
+    [currencyCode]
+  );
+  const toMajor = useCallback(
+    (minorUnits: number) => minorUnitsToMajor(minorUnits, currencyCode),
+    [currencyCode]
+  );
+
+  return { currencyCode, locale, format, formatCompact, toMinor, toMajor };
 }

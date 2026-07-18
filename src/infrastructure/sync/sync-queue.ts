@@ -363,39 +363,50 @@ export async function pullRemoteChanges(
     .slice(0, 10);
 
   for (const [table, mapper] of Object.entries(REMOTE_MAPPERS)) {
-    let query = supabase
-      .from(table)
-      .select("*")
-      .eq("user_id", userId)
-      .gt("updated_at", since)
-      .limit(SYNC_BATCH_SIZE);
-
-    // New-device hydration: keep transactions to a recent rolling window so
-    // the first sync stays fast; older months load lazily on demand (see
-    // pullHistoricalTransactions).
-    if (isInitialHydration && table === "transactions") {
-      query = query.gte("tx_date", windowCutoff);
-    }
-
-    const { data, error } = await query;
-
-    if (error || !data) continue;
-
     const localTableName = LOCAL_TABLES[table];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const localTable = (db as any)[localTableName];
 
-    for (const remoteRow of data) {
-      const mapped = mapper(remoteRow) as { id: string; updatedAt: string };
-      const existing = await localTable.get(mapped.id);
-      if (existing && existing.updatedAt >= mapped.updatedAt) continue;
+    // Page through in updated_at order until a page comes back under the
+    // batch size — a plain .limit() with no pagination silently drops any
+    // rows past the cap and this loop's caller advances lastSyncedAt
+    // regardless, so under-paging here means permanent data loss for users
+    // with >SYNC_BATCH_SIZE changes since their last sync.
+    let cursor = since;
+    for (;;) {
+      let query = supabase
+        .from(table)
+        .select("*")
+        .eq("user_id", userId)
+        .gt("updated_at", cursor)
+        .order("updated_at", { ascending: true })
+        .limit(SYNC_BATCH_SIZE);
 
-      await localTable.put(mapped);
-      // A newer remote row supersedes any stale queued local edit for it.
-      await db.syncQueue
-        .filter((item) => item.table === table && item.recordId === mapped.id)
-        .delete();
-      count++;
+      // New-device hydration: keep transactions to a recent rolling window so
+      // the first sync stays fast; older months load lazily on demand (see
+      // pullHistoricalTransactions).
+      if (isInitialHydration && table === "transactions") {
+        query = query.gte("tx_date", windowCutoff);
+      }
+
+      const { data, error } = await query;
+      if (error || !data) break;
+
+      for (const remoteRow of data) {
+        const mapped = mapper(remoteRow) as { id: string; updatedAt: string };
+        const existing = await localTable.get(mapped.id);
+        if (existing && existing.updatedAt >= mapped.updatedAt) continue;
+
+        await localTable.put(mapped);
+        // A newer remote row supersedes any stale queued local edit for it.
+        await db.syncQueue
+          .filter((item) => item.table === table && item.recordId === mapped.id)
+          .delete();
+        count++;
+      }
+
+      if (data.length < SYNC_BATCH_SIZE) break;
+      cursor = (mapper(data[data.length - 1]) as { updatedAt: string }).updatedAt;
     }
   }
 

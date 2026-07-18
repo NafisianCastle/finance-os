@@ -7,12 +7,14 @@ import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from "date-fns";
 import { ymKey } from "@/lib/utils";
 import { computePortfolioValue } from "@/domain/investments/calculate";
-import type { InvestmentEvent } from "@/infrastructure/db/dexie/schema";
+import type { InvestmentEvent, Transaction } from "@/infrastructure/db/dexie/schema";
 
-export async function getDashboardMetrics(userId: string) {
+export async function getDashboardMetrics(userId: string, preloadedTransactions?: Transaction[]) {
   const db = getDb();
   const accounts = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
-  const transactions = await db.transactions.where("userId").equals(userId).filter((t) => !t.deletedAt).toArray();
+  const transactions =
+    preloadedTransactions ??
+    (await db.transactions.where("userId").equals(userId).filter((t) => !t.deletedAt).toArray());
   const debts = await db.debts.where("userId").equals(userId).filter((d) => !d.deletedAt && d.status === 1).toArray();
   const held = await db.heldLiabilities.where("userId").equals(userId).filter((h) => !h.deletedAt && h.status === HELD_STATUS.ACTIVE).toArray();
   const loans = await db.loansGiven.where("userId").equals(userId).filter((l) => !l.deletedAt && l.status !== LOAN_STATUS.RECOVERED).toArray();

@@ -55,9 +55,14 @@ export default function BudgetsPage() {
     // Pull before reading local budgets — on a fresh browser the local cache
     // is empty, and without this, applySuggestions/addBudget below would
     // conclude a category has no budget yet and create a duplicate local row
-    // for one that already exists remotely.
+    // for one that already exists remotely. Only force the expensive
+    // since-1970 full pull when the local cache is actually empty; otherwise
+    // reuse the normal incremental checkpoint (SyncOnFocus already keeps it
+    // fresh) so a Budgets-page mount doesn't repeat a full 11-table pull.
     if (isSupabaseConfigured()) {
-      await pullRemoteChanges(userId, null);
+      const localBudgetCount = await db.budgets.where("userId").equals(userId).count();
+      const lastSyncedAt = localBudgetCount === 0 ? null : useAppStore.getState().lastSyncedAt;
+      await pullRemoteChanges(userId, lastSyncedAt);
     }
 
     // Load categories

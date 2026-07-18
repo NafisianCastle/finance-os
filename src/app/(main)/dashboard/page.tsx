@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
@@ -13,31 +13,28 @@ import { useAppStore } from "@/store/app-store";
 import { useNotificationStore } from "@/store/notification-store";
 import { getDashboardMetrics } from "@/application/analytics";
 import { loadNotifications } from "@/application/notifications";
+import { getDb } from "@/infrastructure/db/dexie/database";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Tooltip,
-  Cell,
-  LabelList,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { Brain, AlertTriangle, X } from "lucide-react";
 import { SYSTEM_CATEGORIES } from "@/lib/constants";
+
+const IncomeExpenseTrendChart = dynamic(
+  () => import("@/components/charts/dashboard-charts").then((m) => m.IncomeExpenseTrendChart),
+  { ssr: false }
+);
+const SpendBreakdownChart = dynamic(
+  () => import("@/components/charts/dashboard-charts").then((m) => m.SpendBreakdownChart),
+  { ssr: false }
+);
+const MaturityBreakdownChart = dynamic(
+  () => import("@/components/charts/dashboard-charts").then((m) => m.MaturityBreakdownChart),
+  { ssr: false }
+);
 
 const CATEGORY_NAME: Record<string, string> = Object.fromEntries(
   SYSTEM_CATEGORIES.map((c) => [c.id, c.name])
 );
-
-const CATEGORY_COLORS = [
-  "oklch(var(--chart-1))",
-  "oklch(var(--chart-2))",
-  "oklch(var(--chart-3))",
-  "oklch(var(--chart-4))",
-  "oklch(var(--chart-5))",
-];
 
 function maturityColor(score: number) {
   if (score >= 70) return "hsl(var(--success))";
@@ -63,11 +60,38 @@ export default function DashboardPage() {
   const readIds = useNotificationStore((s) => s.readIds);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof getDashboardMetrics>> | null>(null);
 
+  const spendBreakdown = useMemo(() => {
+    if (!metrics) return [];
+    const categoryEntries = Object.entries(metrics.byCategory).sort((a, b) => b[1] - a[1]);
+    const topCategories = categoryEntries.slice(0, 4);
+    const otherTotal = categoryEntries.slice(4).reduce((s, [, v]) => s + v, 0);
+    return [
+      ...topCategories.map(([id, value]) => ({ name: CATEGORY_NAME[id] ?? id, value })),
+      ...(otherTotal > 0 ? [{ name: t("other"), value: otherTotal }] : []),
+    ];
+  }, [metrics, t]);
+
+  const maturityBreakdown = useMemo(() => {
+    if (!metrics) return [];
+    return Object.entries(metrics.maturity.components).map(([key, value]) => ({
+      name: MATURITY_LABELS[key] ?? key,
+      value,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- MATURITY_LABELS is a fresh object literal every render; t is its real dependency
+  }, [metrics, t]);
+
   useEffect(() => {
     if (!userId) return;
-    getDashboardMetrics(userId).then(setMetrics);
-    loadNotifications(userId).then(setNotifications);
-  }, [userId]);
+    (async () => {
+      const txs = await getDb()
+        .transactions.where("userId")
+        .equals(userId)
+        .filter((t) => !t.deletedAt)
+        .toArray();
+      setMetrics(await getDashboardMetrics(userId, txs));
+      setNotifications(await loadNotifications(userId, txs));
+    })();
+  }, [userId, setNotifications]);
 
   if (!metrics) {
     return (
@@ -89,7 +113,7 @@ export default function DashboardPage() {
     );
   }
 
-  const { netWorth, maturity, cashflow, income, expense, byCategory, trend } = metrics;
+  const { netWorth, maturity, cashflow, income, expense, trend } = metrics;
 
   const overdueNotifs = notifications.filter(
     (n) => (n.type === "overdue_debt" || n.type === "overdue_loan") && !readIds.includes(n.id)
@@ -97,19 +121,6 @@ export default function DashboardPage() {
   const OVERDUE_CAP = 2;
   const visibleOverdue = overdueNotifs.slice(0, OVERDUE_CAP);
   const hiddenOverdueCount = overdueNotifs.length - visibleOverdue.length;
-
-  const categoryEntries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
-  const topCategories = categoryEntries.slice(0, 4);
-  const otherTotal = categoryEntries.slice(4).reduce((s, [, v]) => s + v, 0);
-  const spendBreakdown = [
-    ...topCategories.map(([id, value]) => ({ name: CATEGORY_NAME[id] ?? id, value })),
-    ...(otherTotal > 0 ? [{ name: t("other"), value: otherTotal }] : []),
-  ];
-
-  const maturityBreakdown = Object.entries(maturity.components).map(([key, value]) => ({
-    name: MATURITY_LABELS[key] ?? key,
-    value,
-  }));
 
   return (
     <AppShell title={t("title")}>
@@ -206,18 +217,7 @@ export default function DashboardPage() {
             <CardTitle className="text-base">{t("incomeVsExpense")}</CardTitle>
           </CardHeader>
           <CardContent className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trend}>
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                <YAxis
-                  tickFormatter={(v) => formatCompact(v as number)}
-                  tick={{ fontSize: 10 }}
-                />
-                <Tooltip formatter={(v: number) => format(v)} />
-                <Bar dataKey="income" fill="hsl(160 84% 32%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expense" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <IncomeExpenseTrendChart data={trend} format={format} formatCompact={formatCompact} />
           </CardContent>
         </Card>
 
@@ -227,42 +227,7 @@ export default function DashboardPage() {
               <CardTitle className="text-base">{t("topSpending")}</CardTitle>
             </CardHeader>
             <CardContent style={{ height: spendBreakdown.length * 36 + 8 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={spendBreakdown}
-                  layout="vertical"
-                  margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
-                >
-                  <XAxis type="number" hide />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={90}
-                    tick={{ fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip formatter={(v: number) => format(v)} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
-                    {spendBreakdown.map((entry, i) => (
-                      <Cell
-                        key={entry.name}
-                        fill={
-                          entry.name === t("other")
-                            ? "oklch(var(--muted-foreground))"
-                            : CATEGORY_COLORS[i % CATEGORY_COLORS.length]
-                        }
-                      />
-                    ))}
-                    <LabelList
-                      dataKey="value"
-                      position="right"
-                      formatter={(v: number) => format(v)}
-                      style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <SpendBreakdownChart data={spendBreakdown} format={format} otherLabel={t("other")} />
             </CardContent>
           </Card>
         )}
@@ -272,35 +237,7 @@ export default function DashboardPage() {
             <CardTitle className="text-base">{t("maturityBreakdown")}</CardTitle>
           </CardHeader>
           <CardContent style={{ height: maturityBreakdown.length * 32 + 8 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={maturityBreakdown}
-                layout="vertical"
-                margin={{ top: 0, right: 32, bottom: 0, left: 0 }}
-              >
-                <XAxis type="number" domain={[0, 100]} hide />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={90}
-                  tick={{ fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip formatter={(v: number) => `${v} / 100`} />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={14}>
-                  {maturityBreakdown.map((entry) => (
-                    <Cell key={entry.name} fill={maturityColor(entry.value)} />
-                  ))}
-                  <LabelList
-                    dataKey="value"
-                    position="right"
-                    formatter={(v: number) => `${v}`}
-                    style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <MaturityBreakdownChart data={maturityBreakdown} colorFor={maturityColor} />
           </CardContent>
         </Card>
 

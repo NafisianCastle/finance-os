@@ -4,8 +4,12 @@ import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { startOfMonth, endOfMonth, parseISO, isWithinInterval } from "date-fns";
 import { ymKey } from "@/lib/utils";
 import type { AppNotification } from "@/store/notification-store";
+import type { Transaction } from "@/infrastructure/db/dexie/schema";
 
-export async function loadNotifications(userId: string): Promise<AppNotification[]> {
+export async function loadNotifications(
+  userId: string,
+  preloadedTransactions?: Transaction[]
+): Promise<AppNotification[]> {
   const db = getDb();
   const today = new Date().toISOString().slice(0, 10);
   const notifications: AppNotification[] = [];
@@ -53,11 +57,10 @@ export async function loadNotifications(userId: string): Promise<AppNotification
     .filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt)
     .toArray();
 
-  const txs = await db.transactions
-    .where("userId")
-    .equals(userId)
-    .filter((t) => !t.deletedAt && t.type === TX_TYPES.EXPENSE)
-    .toArray();
+  const txs = (
+    preloadedTransactions ??
+    (await db.transactions.where("userId").equals(userId).filter((t) => !t.deletedAt).toArray())
+  ).filter((t) => t.type === TX_TYPES.EXPENSE);
 
   const start = startOfMonth(new Date());
   const end = endOfMonth(new Date());

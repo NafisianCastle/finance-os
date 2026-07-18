@@ -20,19 +20,21 @@ import {
   createInvestment,
   addInvestmentEvent,
 } from "@/application/investments";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from "date-fns";
 
+const AllocationPieChart = dynamic(
+  () => import("@/components/charts/investments-charts").then((m) => m.AllocationPieChart),
+  { ssr: false }
+);
+const PassiveTrendChart = dynamic(
+  () => import("@/components/charts/investments-charts").then((m) => m.PassiveTrendChart),
+  { ssr: false }
+);
+
+// Kept in sync with PIE_COLORS in components/charts/investments-charts.tsx —
+// duplicated (not imported) so this legend list doesn't pull recharts into
+// the page's eager bundle.
 const PIE_COLORS = [
   "#10b981", "#3b82f6", "#f59e0b", "#ef4444",
   "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
@@ -247,27 +249,7 @@ export default function InvestmentsPage() {
                 <div>
                   {allocationData.length > 0 ? (
                     <>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <PieChart>
-                          <Pie
-                            data={allocationData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={70}
-                            label={({ name, percent }) =>
-                              percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ""
-                            }
-                            labelLine={false}
-                          >
-                            {allocationData.map((_, i) => (
-                              <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(v: number) => format(v)} />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      <AllocationPieChart data={allocationData} format={format} />
                       <ul className="mt-2 space-y-1">
                         {allocationData.map((d, i) => (
                           <li key={d.name} className="flex justify-between text-xs">
@@ -341,18 +323,12 @@ export default function InvestmentsPage() {
                     <p className="text-xs text-muted-foreground">{t("last6Months")}</p>
                     <p className="text-sm font-semibold text-primary">{format(totalPassive6m)}</p>
                   </div>
-                  <ResponsiveContainer width="100%" height={140}>
-                    <BarChart data={passiveTrend} barSize={20}>
-                      <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                      <YAxis
-                        tickFormatter={(v) => formatCompact(v as number)}
-                        tick={{ fontSize: 10 }}
-                        width={40}
-                      />
-                      <Tooltip formatter={(v: number) => format(v)} />
-                      <Bar dataKey="profit" fill="#10b981" radius={[4, 4, 0, 0]} name={t("profitReceived")} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <PassiveTrendChart
+                    data={passiveTrend}
+                    format={format}
+                    formatCompact={formatCompact}
+                    profitLabel={t("profitReceived")}
+                  />
                 </div>
               )}
             </CardContent>

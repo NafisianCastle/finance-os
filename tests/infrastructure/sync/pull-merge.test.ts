@@ -9,6 +9,7 @@ function chainableQuery(table: string) {
     eq: () => builder,
     gt: () => builder,
     gte: () => builder,
+    order: () => builder,
     limit: () => builder,
     then: (resolve: (v: { data: unknown; error: null }) => void) =>
       resolve({ data: tableData[table] ?? [], error: null }),
