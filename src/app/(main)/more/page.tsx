@@ -7,7 +7,6 @@ import {
   Brain,
   CreditCard,
   HandCoins,
-  Landmark,
   LineChart,
   Settings,
   FileText,
@@ -35,7 +34,7 @@ export default function MorePage() {
           <Link key={href} href={href}>
             <Card className="transition-colors hover:bg-accent/50">
               <CardContent className="flex items-center gap-3 py-4">
-                <Icon className="h-5 w-5 text-primary" />
+                <Icon className="h-5 w-5 text-primary shrink-0" />
                 <span className="font-medium">{label}</span>
               </CardContent>
             </Card>
