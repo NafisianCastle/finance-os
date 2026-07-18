@@ -4,7 +4,7 @@ import type { MaturityResult } from "./types";
 export interface MaturityInput {
   budgetAdherencePct: number | null;
   savingsConsistencyPct: number | null;
-  debtScorePct: number;
+  debtScorePct: number | null;
   smartBuyDisciplinePct: number | null;
   goalProgressPct: number | null;
   impulseControlPct: number | null;

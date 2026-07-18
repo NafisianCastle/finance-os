@@ -53,6 +53,7 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
   const monthEnd = endOfMonth(new Date());
   let income = 0;
   let expense = 0;
+  let impulseExpensePoisha = 0;
   const byCategory: Record<string, number> = {};
 
   for (const tx of transactions) {
@@ -62,6 +63,9 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
     if (tx.type === TX_TYPES.EXPENSE) {
       expense += tx.amountPoisha;
       byCategory[tx.categoryId] = (byCategory[tx.categoryId] ?? 0) + tx.amountPoisha;
+      if (tx.tags?.includes("impulse")) {
+        impulseExpensePoisha += tx.amountPoisha;
+      }
     }
   }
 
@@ -75,13 +79,22 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
     buyEvals.length > 0 ? Math.round((1 - unsafeBuys / buyEvals.length) * 100) : null;
 
   const impulseBuys = buyEvals.filter((e) => e.priority === PRIORITY.IMPULSE).length;
-  const impulseControl =
+  const impulseControlFromEvals =
     buyEvals.length > 0 ? Math.round((1 - impulseBuys / buyEvals.length) * 100) : null;
+  const impulseControlFromTx =
+    expense > 0 ? Math.round((1 - impulseExpensePoisha / expense) * 100) : null;
+  const impulseControl = impulseControlFromEvals ?? impulseControlFromTx;
 
   const maturity = computeMaturityScore({
     budgetAdherencePct: budgets.length > 0 ? budgetHealthScore(budgetAllocations) : null,
-    savingsConsistencyPct: income > 0 || expense > 0 ? (income > expense ? 75 : 40) : null,
-    debtScorePct: netWorth.totalLiabilitiesPoisha < (profile?.monthlyIncomePoisha ?? 1) ? 70 : 45,
+    savingsConsistencyPct:
+      income > 0 ? Math.round(Math.max(0, (income - expense) / income) * 100) : null,
+    debtScorePct:
+      debts.length > 0 || creditUsed > 0
+        ? netWorth.totalLiabilitiesPoisha < (profile?.monthlyIncomePoisha ?? 1)
+          ? 70
+          : 45
+        : null,
     smartBuyDisciplinePct: smartBuyDiscipline,
     goalProgressPct:
       goals.length > 0

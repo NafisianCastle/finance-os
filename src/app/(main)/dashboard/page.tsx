@@ -205,15 +205,21 @@ export default function DashboardPage() {
             <Badge variant="secondary">{maturity.level}</Badge>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold">{maturity.score}</span>
-              <span className="text-muted-foreground pb-1">/ 100</span>
-            </div>
-            <Progress value={maturity.score} color={maturityColor(maturity.score)} />
+            {maturity.measuredCount === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("maturityNoData")}</p>
+            ) : (
+              <>
+                <div className="flex items-end gap-2">
+                  <span className="text-3xl font-bold">{maturity.score}</span>
+                  <span className="text-muted-foreground pb-1">/ 100</span>
+                </div>
+                <Progress value={maturity.score} color={maturityColor(maturity.score)} />
+              </>
+            )}
             <p className="text-xs text-muted-foreground">
               {MATURITY_LEVEL_DESC[maturity.level] ?? ""}
             </p>
-            {maturity.measuredCount < maturity.totalCount && (
+            {maturity.measuredCount < maturity.totalCount && maturity.measuredCount > 0 && (
               <p className="text-xs text-muted-foreground">
                 {t("maturityPartialData", { measured: maturity.measuredCount, total: maturity.totalCount })}
               </p>

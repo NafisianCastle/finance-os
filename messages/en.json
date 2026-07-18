@@ -143,6 +143,7 @@
     "maturityLevelDesc_Disciplined": "Strong habits across the board — nice work.",
     "maturityLevelDesc_Wealth Builder": "Excellent — your habits are set up for long-term wealth.",
     "maturityBreakdownDesc": "What makes up your score. Higher is better.",
+    "maturityNoData": "Not enough data yet",
     "maturityPartialData": "Based on {measured} of {total} areas — the rest need more activity before they can be scored.",
     "noDataYet": "Not enough data",
     "maturityBudgetDesc": "Staying within the budgets you set",

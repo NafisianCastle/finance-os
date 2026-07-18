@@ -93,6 +93,96 @@ describe("getDashboardMetrics", () => {
     expect(metrics.netWorth.totalAssetsPoisha).toBe(0);
     expect(metrics.income).toBe(0);
     expect(metrics.expense).toBe(0);
-    expect(metrics.maturity.score).toBeGreaterThanOrEqual(0);
+    expect(metrics.maturity.score).toBe(0);
+    expect(metrics.maturity.measuredCount).toBe(0);
+    expect(metrics.maturity.totalCount).toBe(6);
+    expect(metrics.maturity.components.budget).toBeNull();
+    expect(metrics.maturity.components.savings).toBeNull();
+    expect(metrics.maturity.components.debt).toBeNull();
+    expect(metrics.maturity.components.smartBuy).toBeNull();
+    expect(metrics.maturity.components.goals).toBeNull();
+    expect(metrics.maturity.components.impulse).toBeNull();
+  });
+
+  it("computes impulse control from impulse-tagged transactions when no buy evaluations exist", async () => {
+    await getDb().accounts.put(account());
+    const today = new Date().toISOString().slice(0, 10);
+    const txs: Transaction[] = [
+      { id: "t1", userId: USER_ID, type: TX_TYPES.EXPENSE, amountPoisha: 5_000, accountId: "acc-1", categoryId: "food", date: today, tags: ["impulse"], createdAt: now, updatedAt: now },
+      { id: "t2", userId: USER_ID, type: TX_TYPES.EXPENSE, amountPoisha: 15_000, accountId: "acc-1", categoryId: "food", date: today, createdAt: now, updatedAt: now },
+    ];
+    for (const tx of txs) await getDb().transactions.put(tx);
+
+    const metrics = await getDashboardMetrics(USER_ID);
+    expect(metrics.maturity.components.impulse).toBe(Math.round((1 - 5_000 / 20_000) * 100));
+  });
+
+  it("returns null debt score when no debt or credit data exists", async () => {
+    await getDb().accounts.put(account({ type: 1, balancePoisha: 0 }));
+    const profile = {
+      id: "p1",
+      userId: USER_ID,
+      monthlyIncomePoisha: 50_000,
+      currencyCode: "BDT",
+      locale: "en",
+      emergencyMonths: 3,
+      onboardingComplete: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().userProfiles.put(profile as never);
+
+    const metrics = await getDashboardMetrics(USER_ID);
+    expect(metrics.maturity.components.debt).toBeNull();
+  });
+
+  it("computes savings consistency from actual savings rate when income and expense exist", async () => {
+    await getDb().accounts.put(account());
+    const today = new Date().toISOString().slice(0, 10);
+    const txs: Transaction[] = [
+      { id: "t1", userId: USER_ID, type: TX_TYPES.INCOME, amountPoisha: 20_000, accountId: "acc-1", categoryId: "income", date: today, createdAt: now, updatedAt: now },
+      { id: "t2", userId: USER_ID, type: TX_TYPES.EXPENSE, amountPoisha: 8_000, accountId: "acc-1", categoryId: "food", date: today, createdAt: now, updatedAt: now },
+    ];
+    for (const tx of txs) await getDb().transactions.put(tx);
+
+    const metrics = await getDashboardMetrics(USER_ID);
+    expect(metrics.maturity.components.savings).toBe(Math.round((20_000 - 8_000) / 20_000 * 100));
+  });
+
+  it("returns null savings score when there are no transactions", async () => {
+    await getDb().accounts.put(account());
+    const metrics = await getDashboardMetrics(USER_ID);
+    expect(metrics.maturity.components.savings).toBeNull();
+  });
+
+  it("computes debt score when active debt exists", async () => {
+    await getDb().accounts.put(account());
+    const profile = {
+      id: "p1",
+      userId: USER_ID,
+      monthlyIncomePoisha: 50_000,
+      currencyCode: "BDT",
+      locale: "en",
+      emergencyMonths: 3,
+      onboardingComplete: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().userProfiles.put(profile as never);
+    const debt: Debt = {
+      id: "d1",
+      userId: USER_ID,
+      lender: "Bank",
+      principalPoisha: 30_000,
+      remainingPoisha: 30_000,
+      borrowDate: "2025-01-01",
+      status: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await getDb().debts.put(debt);
+
+    const metrics = await getDashboardMetrics(USER_ID);
+    expect(metrics.maturity.components.debt).toBe(70);
   });
 });

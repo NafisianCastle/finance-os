@@ -29,10 +29,11 @@ export function suggestBudgets(
 export function budgetHealthScore(
   allocations: { allocated: number; spent: number }[]
 ): number {
-  if (allocations.length === 0) return 50;
+  if (allocations.length === 0) return 0;
   let score = 0;
   for (const { allocated, spent } of allocations) {
     if (allocated <= 0) continue;
+    if (spent === 0) { score += 100; continue; }
     const pct = spent / allocated;
     if (pct >= 0.95 && pct <= 1.05) score += 100;
     else if (pct < 0.95) score += 90;

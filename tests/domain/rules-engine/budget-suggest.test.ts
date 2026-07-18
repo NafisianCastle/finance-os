@@ -23,4 +23,13 @@ describe("Budget suggestion engine", () => {
     ]);
     expect(score).toBeGreaterThan(60);
   });
+
+  it("returns 100 for untouched budgets with zero spend", () => {
+    const score = budgetHealthScore([{ allocated: 5_000, spent: 0 }]);
+    expect(score).toBe(100);
+  });
+
+  it("returns 0 for empty allocations", () => {
+    expect(budgetHealthScore([])).toBe(0);
+  });
 });
