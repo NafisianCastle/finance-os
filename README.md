@@ -7,7 +7,7 @@
 
 **Your money, your device, your rules.** A local-first, installable personal finance PWA that works fully offline — no account required, cloud sync optional.
 
-**Live demo:** [finance-os-orpin-phi.vercel.app](https://finance-os-orpin-phi.vercel.app/)
+**Live demo:** [finance-operating-system.vercel.app](https://finance-operating-system.vercel.app)
 
 ---
 
@@ -22,13 +22,14 @@ Most finance apps demand an account before you can add a single transaction, and
 
 ## Features
 
-- Income / expense / transfer tracking (BDT default)
+- Income / expense / transfer tracking, full edit and delete on past transactions
 - Category budgets with overspend alerts and rules-based suggestions
 - **Smart Buy** — deterministic "can I afford this?" decision engine
 - Held money (liability) tracking — excluded from net worth
 - Net worth, cashflow forecast, financial maturity score
 - Debt, loans given, goals, basic investments
 - On-demand monthly reports (never stored in the cloud)
+- Multi-currency support with full internationalization (English / Bengali)
 - Installable PWA with offline support and background sync queue
 
 ## Quick start
