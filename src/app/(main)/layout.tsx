@@ -1,12 +1,13 @@
 "use client";
 
+import { AppLoadingScreen } from "@/components/app-loading-screen";
 import { SyncOnFocus } from "@/components/sync-on-focus";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import { pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
 import { useAppStore } from "@/store/app-store";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function MainLayout({
   children,
@@ -17,17 +18,20 @@ export default function MainLayout({
   const pathname = usePathname();
   const userId = useAppStore((s) => s.userId);
   const hasHydrated = useAppStore((s) => s.hasHydrated);
+  const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
     if (!hasHydrated) return; // wait for persisted userId to load from localStorage first
 
     const allowUnauthenticated = ["/onboarding", "/login", "/signup"];
     const authConfigured = isSupabaseConfigured();
+    let cancelled = false;
 
     if (!userId) {
       if (!allowUnauthenticated.includes(pathname)) {
         router.replace("/onboarding");
       }
+      setInitializing(false);
       return;
     }
 
@@ -46,10 +50,18 @@ export default function MainLayout({
       if (!profile?.onboardingComplete && pathname !== "/onboarding") {
         router.replace("/onboarding");
       }
+      if (!cancelled) setInitializing(false);
     }
 
     checkOnboarding();
+    return () => {
+      cancelled = true;
+    };
   }, [userId, pathname, router, hasHydrated]);
+
+  if (initializing) {
+    return <AppLoadingScreen />;
+  }
 
   return (
     <>
