@@ -46,7 +46,8 @@ export default function LoansGivenPage() {
   }
 
   useEffect(() => {
-    load();
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
   }, [userId]);
 
   function startRepay(loan: LoanGiven) {

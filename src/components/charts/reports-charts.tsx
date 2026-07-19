@@ -38,7 +38,7 @@ export function CategoryBreakdownChart({
           tickLine={false}
           axisLine={false}
         />
-        <Tooltip formatter={(v: number) => formatMoney(v)} />
+        <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
         <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
           {data.map((entry, i) => (
             <Cell key={entry.name} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
@@ -46,7 +46,7 @@ export function CategoryBreakdownChart({
           <LabelList
             dataKey="value"
             position="right"
-            formatter={(v: number) => formatMoney(v)}
+            formatter={(v) => formatMoney(Number(v ?? 0))}
             style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
           />
         </Bar>
@@ -72,7 +72,7 @@ export function IncomeExpenseTrendChart({
           tickFormatter={formatAxisTick ? (v) => formatAxisTick(v as number) : undefined}
           tick={{ fontSize: 10 }}
         />
-        <Tooltip formatter={(v: number) => formatMoney(v)} />
+        <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
         <Bar dataKey="income" fill="hsl(160 84% 32%)" radius={[4, 4, 0, 0]} />
         <Bar dataKey="expense" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
       </BarChart>

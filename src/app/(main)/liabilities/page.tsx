@@ -39,7 +39,8 @@ export default function LiabilitiesPage() {
   }
 
   useEffect(() => {
-    load();
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
   }, [userId]);
 
   async function addHeld() {

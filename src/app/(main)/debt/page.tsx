@@ -63,7 +63,10 @@ export default function DebtPage() {
     setRepayAccountId((prev) => prev || accs[0]?.id || "");
   }
 
-  useEffect(() => { load(); }, [userId]);
+  useEffect(() => {
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
+  }, [userId]);
 
   function startRepay(debt: Debt) {
     setRepayingId(debt.id);
@@ -137,7 +140,7 @@ export default function DebtPage() {
     const monthsLeft = Math.max(
       1,
       Math.round(
-        (new Date(d.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30)
+        (new Date(d.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24 * 30)
       )
     );
     return s + d.remainingPoisha / monthsLeft;

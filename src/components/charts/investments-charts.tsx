@@ -24,14 +24,14 @@ export function AllocationPieChart({
           cx="50%"
           cy="50%"
           outerRadius={70}
-          label={({ name, percent }) => (percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : "")}
+          label={({ name, percent }) => ((percent ?? 0) > 0.05 ? `${name} ${((percent ?? 0) * 100).toFixed(0)}%` : "")}
           labelLine={false}
         >
           {data.map((_, i) => (
             <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(v: number) => format(v)} />
+        <Tooltip formatter={(v) => format(Number(v ?? 0))} />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -53,7 +53,7 @@ export function PassiveTrendChart({
       <BarChart data={data} barSize={20}>
         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
         <YAxis tickFormatter={(v) => formatCompact(v as number)} tick={{ fontSize: 10 }} width={40} />
-        <Tooltip formatter={(v: number) => format(v)} />
+        <Tooltip formatter={(v) => format(Number(v ?? 0))} />
         <Bar dataKey="profit" fill="#10b981" radius={[4, 4, 0, 0]} name={profitLabel} />
       </BarChart>
     </ResponsiveContainer>

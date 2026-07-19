@@ -82,8 +82,11 @@ export default function SettingsPage() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    setCurrency(currencyCode);
-    setUiLocale(locale.split("-")[0]);
+    const timer = setTimeout(() => {
+      setCurrency(currencyCode);
+      setUiLocale(locale.split("-")[0]);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [currencyCode, locale]);
 
   useEffect(() => {

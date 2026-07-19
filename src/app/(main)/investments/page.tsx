@@ -119,7 +119,10 @@ export default function InvestmentsPage() {
     setRows(await loadInvestmentsWithEvents(userId));
   }
 
-  useEffect(() => { load(); }, [userId]);
+  useEffect(() => {
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
+  }, [userId]);
 
   async function handleCreate() {
     if (!userId || !name) return;

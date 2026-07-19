@@ -93,7 +93,8 @@ export default function SmartBuyPage() {
   }
 
   useEffect(() => {
-    loadHistory();
+    const timer = setTimeout(loadHistory, 0);
+    return () => clearTimeout(timer);
   }, [userId]);
 
   // Auto-evaluate when price, category, or priority changes

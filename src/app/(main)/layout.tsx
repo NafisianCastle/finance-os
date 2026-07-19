@@ -26,46 +26,48 @@ export default function MainLayout({
   const checkedUserId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!hasHydrated) return; // wait for persisted userId to load from localStorage first
-
-    if (!userId) {
-      if (!UNAUTHENTICATED_ROUTES.includes(pathname)) {
-        router.replace("/onboarding");
-      }
-      setInitializing(false);
-      return;
-    }
-
-    if (checkedUserId.current === userId) {
-      setInitializing(false);
-      return;
-    }
-
     let cancelled = false;
+
     async function checkOnboarding() {
+      if (!hasHydrated) return; // wait for persisted userId to load from localStorage first
+
+      if (!userId) {
+        if (!UNAUTHENTICATED_ROUTES.includes(pathname)) {
+          router.replace("/onboarding");
+        }
+        if (!cancelled) setInitializing(false);
+        return;
+      }
+
+      if (checkedUserId.current === userId) {
+        if (!cancelled) setInitializing(false);
+        return;
+      }
+
       const db = getDb();
       const authConfigured = isSupabaseConfigured();
-      let profile = await db.userProfiles.where("userId").equals(userId!).first();
+      let profile = await db.userProfiles.where("userId").equals(userId).first();
 
       // Local Dexie is empty on a fresh browser/device — pull from Supabase
       // before concluding onboarding hasn't happened, otherwise this redirects
       // to /onboarding and reseeds duplicate default accounts.
       if (!profile?.onboardingComplete && authConfigured) {
-        await pullRemoteChanges(userId!, null);
-        profile = await db.userProfiles.where("userId").equals(userId!).first();
+        await pullRemoteChanges(userId, null);
+        profile = await db.userProfiles.where("userId").equals(userId).first();
       }
 
       if (cancelled) return;
-      checkedUserId.current = userId!;
+      checkedUserId.current = userId;
       if (!profile?.onboardingComplete && pathname !== "/onboarding") {
         router.replace("/onboarding");
       }
       setInitializing(false);
     }
 
-    checkOnboarding();
+    const timer = setTimeout(checkOnboarding, 0);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [userId, pathname, router, hasHydrated]);
 

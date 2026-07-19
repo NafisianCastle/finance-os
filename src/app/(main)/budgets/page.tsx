@@ -125,7 +125,8 @@ export default function BudgetsPage() {
   }
 
   useEffect(() => {
-    load();
+    const timer = setTimeout(load, 0);
+    return () => clearTimeout(timer);
   }, [userId]);
 
   async function applySuggestions() {

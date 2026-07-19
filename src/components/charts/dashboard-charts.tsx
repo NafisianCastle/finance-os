@@ -33,7 +33,7 @@ export function IncomeExpenseTrendChart({
       <BarChart data={data}>
         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
         <YAxis tickFormatter={(v) => formatCompact(v as number)} tick={{ fontSize: 10 }} />
-        <Tooltip formatter={(v: number) => format(v)} />
+        <Tooltip formatter={(v) => format(Number(v ?? 0))} />
         <Bar dataKey="income" fill="hsl(160 84% 32%)" radius={[4, 4, 0, 0]} />
         <Bar dataKey="expense" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
       </BarChart>
@@ -62,7 +62,7 @@ export function SpendBreakdownChart({
           tickLine={false}
           axisLine={false}
         />
-        <Tooltip formatter={(v: number) => format(v)} />
+        <Tooltip formatter={(v) => format(Number(v ?? 0))} />
         <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
           {data.map((entry, i) => (
             <Cell
@@ -77,7 +77,7 @@ export function SpendBreakdownChart({
           <LabelList
             dataKey="value"
             position="right"
-            formatter={(v: number) => format(v)}
+            formatter={(v) => format(Number(v ?? 0))}
             style={{ fontSize: 11, fill: "oklch(var(--foreground))" }}
           />
         </Bar>
