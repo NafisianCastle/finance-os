@@ -29,7 +29,7 @@ export default function MorePage() {
 
   return (
     <AppShell title={t("title")}>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {links.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href}>
             <Card className="transition-colors hover:bg-accent/50">

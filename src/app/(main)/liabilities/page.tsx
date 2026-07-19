@@ -123,12 +123,12 @@ export default function LiabilitiesPage() {
         {items.map((h) => (
           <Card key={h.id}>
             <CardContent className="py-4 space-y-2">
-              <div className="flex justify-between">
-                <div>
-                  <p className="font-medium">{h.owner}</p>
-                  <p className="text-xs text-muted-foreground">{h.purpose}</p>
+              <div className="flex justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{h.owner}</p>
+                  <p className="truncate text-xs text-muted-foreground">{h.purpose}</p>
                 </div>
-                <p className="font-semibold text-warning">{format(h.amountPoisha)}</p>
+                <p className="shrink-0 font-semibold text-warning">{format(h.amountPoisha)}</p>
               </div>
               {h.status === HELD_STATUS.ACTIVE && (
                 <Button

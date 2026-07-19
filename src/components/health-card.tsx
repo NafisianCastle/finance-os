@@ -18,8 +18,8 @@ export function HealthCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-2xl font-bold">{value}</p>
-        {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
+        <p className="truncate text-2xl font-bold" title={value}>{value}</p>
+        {subtitle && <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>}
       </CardContent>
     </Card>
   );

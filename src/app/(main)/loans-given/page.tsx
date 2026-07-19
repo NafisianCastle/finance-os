@@ -129,12 +129,12 @@ export default function LoansGivenPage() {
         {loans.map((l) => (
           <Card key={l.id}>
             <CardContent className="py-4 space-y-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium">{l.borrower}</p>
+              <div className="flex justify-between items-center gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{l.borrower}</p>
                   <Badge variant="outline" className="mt-1">{statusLabel[l.status]}</Badge>
                 </div>
-                <p className="font-semibold text-primary">{format(l.remainingPoisha)}</p>
+                <p className="shrink-0 font-semibold text-primary">{format(l.remainingPoisha)}</p>
               </div>
               {l.status !== LOAN_STATUS.RECOVERED && (
                 repayingId === l.id ? (

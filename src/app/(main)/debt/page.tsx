@@ -220,9 +220,9 @@ export default function DebtPage() {
           return (
             <Card key={d.id} className={isOverdue ? "border-destructive/40" : ""}>
               <CardContent className="py-4 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium">{d.lender}</p>
+                <div className="flex justify-between items-start gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{d.lender}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {isOverdue ? (
                         <Badge variant="destructive" className="text-xs">{t("overdue")}</Badge>
@@ -239,7 +239,7 @@ export default function DebtPage() {
                       )}
                     </div>
                   </div>
-                  <p className="font-semibold text-destructive">{format(d.remainingPoisha)}</p>
+                  <p className="shrink-0 font-semibold text-destructive">{format(d.remainingPoisha)}</p>
                 </div>
                 {d.status !== DEBT_STATUS.PAID && (
                   repayingId === d.id ? (

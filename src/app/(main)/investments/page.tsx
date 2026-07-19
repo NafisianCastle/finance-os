@@ -222,13 +222,13 @@ export default function InvestmentsPage() {
         {/* Summary */}
         <Card>
           <CardContent className="py-4 grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-muted-foreground">{t("portfolioValue")}</p>
-              <p className="text-xl font-bold">{format(portfolioTotal)}</p>
+            <div className="min-w-0">
+              <p className="truncate text-xs text-muted-foreground">{t("portfolioValue")}</p>
+              <p className="truncate text-xl font-bold">{format(portfolioTotal)}</p>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">{t("totalReturn")}</p>
-              <p className={`text-xl font-bold ${totalReturn >= 0 ? "text-primary" : "text-destructive"}`}>
+            <div className="min-w-0">
+              <p className="truncate text-xs text-muted-foreground">{t("totalReturn")}</p>
+              <p className={`truncate text-xl font-bold ${totalReturn >= 0 ? "text-primary" : "text-destructive"}`}>
                 {totalReturn >= 0 ? "+" : ""}{format(totalReturn)}
               </p>
             </div>

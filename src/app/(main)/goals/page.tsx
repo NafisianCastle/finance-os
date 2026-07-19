@@ -180,9 +180,9 @@ export default function GoalsPage() {
             return (
               <Card key={g.id} className="transition-colors hover:bg-accent/40">
                 <CardContent className="pt-4 space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-medium">{g.name}</span>
-                    <span className="text-sm">{Math.round(pct)}%</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium">{g.name}</span>
+                    <span className="shrink-0 text-sm">{Math.round(pct)}%</span>
                   </div>
                   <Progress value={pct} />
                   <p className="text-xs text-muted-foreground">

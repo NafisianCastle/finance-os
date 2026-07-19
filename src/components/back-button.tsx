@@ -16,7 +16,7 @@ export function BackButton() {
       type="button"
       onClick={() => router.back()}
       aria-label="Go back"
-      className="fixed left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-sm"
     >
       <ArrowLeft className="h-5 w-5" />
     </button>

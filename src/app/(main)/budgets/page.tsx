@@ -478,9 +478,9 @@ export default function BudgetsPage() {
                   className={cn("transition-colors hover:bg-accent/40", over && "border-destructive/50")}
                 >
                   <CardContent className="pt-4 space-y-2">
-                    <div className="flex justify-between capitalize">
-                      <span className="font-medium">{catName}</span>
-                      <span className="text-sm text-muted-foreground">
+                    <div className="flex justify-between gap-3 capitalize">
+                      <span className="min-w-0 truncate font-medium">{catName}</span>
+                      <span className="shrink-0 text-sm text-muted-foreground">
                         {format(spent)} / {format(total)}
                       </span>
                     </div>

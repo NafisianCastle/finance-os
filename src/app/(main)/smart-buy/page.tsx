@@ -262,14 +262,14 @@ export default function SmartBuyPage() {
             <p className="text-sm font-medium">{t("pastEvaluations")}</p>
             {history.map((h) => (
               <Card key={h.id}>
-                <CardContent className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="font-medium">{h.productName || t("untitled")}</p>
-                    <p className="text-xs text-muted-foreground">
+                <CardContent className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{h.productName || t("untitled")}</p>
+                    <p className="truncate text-xs text-muted-foreground">
                       {format(h.pricePoisha)} · {new Date(h.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <Badge variant={h.tier >= 5 ? "destructive" : "secondary"}>
+                  <Badge variant={h.tier >= 5 ? "destructive" : "secondary"} className="shrink-0">
                     {tierText(h.tier)}
                   </Badge>
                 </CardContent>
