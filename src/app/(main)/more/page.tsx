@@ -31,7 +31,7 @@ export default function MorePage() {
     <AppShell title={t("title")}>
       <div className="space-y-3">
         {links.map(({ href, label, icon: Icon }) => (
-          <Link key={href} href={href}>
+          <Link key={href} href={href} className="block">
             <Card className="transition-colors hover:bg-accent/50">
               <CardContent className="flex items-center gap-3 py-4">
                 <Icon className="h-5 w-5 text-primary shrink-0" />

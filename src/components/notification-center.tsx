@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Bell } from "lucide-react";
 import { useNotificationStore } from "@/store/notification-store";
 
@@ -22,10 +23,14 @@ export function NotificationCenter() {
 
   const unread = notifications.filter((n) => !readIds.includes(n.id));
 
-  function toggle() {
-    setOpen((v) => !v);
-    if (!open && unread.length > 0) markAllRead();
-  }
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   if (notifications.length === 0) return null;
 
@@ -33,7 +38,7 @@ export function NotificationCenter() {
     <div className="relative">
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => setOpen((v) => !v)}
         className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-muted transition-colors"
         aria-label={`Notifications${unread.length > 0 ? ` (${unread.length} unread)` : ""}`}
       >
@@ -54,31 +59,66 @@ export function NotificationCenter() {
           <div className="absolute right-0 top-10 z-50 w-80 max-h-96 overflow-y-auto rounded-xl border border-border bg-background shadow-lg">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
               <p className="text-sm font-semibold">Notifications</p>
-              <span className="text-xs text-muted-foreground">{notifications.length} total</span>
+              {unread.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => markAllRead()}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Mark all read
+                </button>
+              ) : (
+                <span className="text-xs text-muted-foreground">{notifications.length} total</span>
+              )}
             </div>
             {notifications.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">All clear</p>
             ) : (
               <ul>
-                {notifications.map((n) => (
-                  <li
-                    key={n.id}
-                    onClick={() => markRead(n.id)}
-                    className={`flex gap-3 px-4 py-3 border-b border-border last:border-0 cursor-default ${
-                      readIds.includes(n.id) ? "opacity-60" : ""
-                    }`}
-                  >
-                    <span
-                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[n.priority]}`}
-                    />
-                    <div>
-                      <p className={`text-sm font-medium ${PRIORITY_COLOR[n.priority]}`}>
-                        {n.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>
-                    </div>
-                  </li>
-                ))}
+                {notifications.map((n) => {
+                  const isRead = readIds.includes(n.id);
+                  const content = (
+                    <>
+                      <span
+                        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[n.priority]}`}
+                      />
+                      <div>
+                        <p className={`text-sm font-medium ${PRIORITY_COLOR[n.priority]}`}>
+                          {n.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>
+                      </div>
+                    </>
+                  );
+                  const itemClassName = `flex gap-3 px-4 py-3 border-b border-border last:border-0 text-left hover:bg-muted/60 transition-colors ${
+                    isRead ? "opacity-60" : ""
+                  }`;
+
+                  return (
+                    <li key={n.id}>
+                      {n.href ? (
+                        <Link
+                          href={n.href}
+                          onClick={() => {
+                            markRead(n.id);
+                            setOpen(false);
+                          }}
+                          className={`${itemClassName} w-full`}
+                        >
+                          {content}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => markRead(n.id)}
+                          className={`${itemClassName} w-full`}
+                        >
+                          {content}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
