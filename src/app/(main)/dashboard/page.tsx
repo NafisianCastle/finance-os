@@ -115,6 +115,8 @@ export default function DashboardPage() {
             <Skeleton className="h-20 w-full" />
           </div>
           <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-11 w-full" />
         </div>
       </AppShell>
     );
