@@ -52,13 +52,18 @@ export interface Transaction extends BaseRecord {
 export interface ShoppingList extends BaseRecord {
   name: string;
   status: "active" | "completed";
+  /** @deprecated First id of linkedTransactionIds; kept for old-client sync compat */
   linkedTransactionId?: string | null;
+  /** One transaction per distinct (account, category) group among checked items */
+  linkedTransactionIds?: string[];
 }
 
 export interface ShoppingListItem extends BaseRecord {
   listId: string;
   name: string;
   categoryId?: string;
+  /** Payment account for this item; items can be split across accounts at checkout */
+  accountId?: string;
   quantity?: number;
   unit?: string;
   estimatedPricePoisha?: number;

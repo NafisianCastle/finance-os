@@ -62,6 +62,7 @@ export default function ShoppingListDetailPage() {
   const [categoryId, setCategoryId] = useState("food");
   const [showFinish, setShowFinish] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [overrideItemId, setOverrideItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -88,7 +89,13 @@ export default function ShoppingListDetailPage() {
       // Already-finalized trip: only price entry is allowed, not un/checking.
       return;
     }
-    await updateShoppingListItem(item.id, { checked: !item.checked });
+    const checked = !item.checked;
+    await updateShoppingListItem(item.id, {
+      checked,
+      ...(checked
+        ? { categoryId: item.categoryId ?? categoryId, accountId: item.accountId ?? accountId }
+        : {}),
+    });
   }
 
   async function savePrice(item: ShoppingListItem) {
@@ -115,7 +122,7 @@ export default function ShoppingListDetailPage() {
     if (!userId || !accountId) return;
     setFinishing(true);
     try {
-      await finishShoppingList(userId, listId, accountId, categoryId);
+      await finishShoppingList(userId, listId, accountId);
       toast(t("finishedToast"), "success");
       router.push("/shopping-lists");
     } finally {
@@ -141,61 +148,139 @@ export default function ShoppingListDetailPage() {
   const uncheckedPriceCount = checkedItems.filter((i) => !i.actualPricePoisha).length;
   const isCompleted = list?.status === "completed";
 
+  const finishGroups = Object.values(
+    checkedItems.reduce<Record<string, { key: string; categoryName: string; accountName: string; count: number; total: number }>>(
+      (acc, item) => {
+        const itemAccountId = item.accountId ?? accountId;
+        const itemCategoryId = item.categoryId ?? categoryId;
+        const key = `${itemAccountId} ${itemCategoryId}`;
+        if (!acc[key]) {
+          acc[key] = {
+            key,
+            categoryName: SYSTEM_CATEGORIES.find((c) => c.id === itemCategoryId)?.name ?? itemCategoryId,
+            accountName: accounts.find((a) => a.id === itemAccountId)?.name ?? "-",
+            count: 0,
+            total: 0,
+          };
+        }
+        acc[key].count += 1;
+        acc[key].total += item.actualPricePoisha ?? 0;
+        return acc;
+      },
+      {}
+    )
+  );
+
   function ItemRow({ item }: { item: ShoppingListItem }) {
     const isEditingPrice = priceDrafts[item.id] !== undefined;
     return (
-      <div className="flex items-center gap-3 py-2.5">
-        <button
-          type="button"
-          onClick={() => toggleChecked(item)}
-          disabled={isCompleted}
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
-            item.checked ? "border-primary bg-primary text-primary-foreground" : "border-border"
-          } ${isCompleted ? "opacity-60" : ""}`}
-        >
-          {item.checked && <Check className="h-4 w-4" />}
-        </button>
+      <div className="flex flex-col gap-1.5 py-2.5">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => toggleChecked(item)}
+            disabled={isCompleted}
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
+              item.checked ? "border-primary bg-primary text-primary-foreground" : "border-border"
+            } ${isCompleted ? "opacity-60" : ""}`}
+          >
+            {item.checked && <Check className="h-4 w-4" />}
+          </button>
 
-        <div className="min-w-0 flex-1">
-          <p className={`truncate ${item.checked ? "text-muted-foreground line-through" : ""}`}>{item.name}</p>
+          <div className="min-w-0 flex-1">
+            <p className={`truncate ${item.checked ? "text-muted-foreground line-through" : ""}`}>{item.name}</p>
+          </div>
+
+          {item.checked ? (
+            isEditingPrice ? (
+              <div className="flex w-28 items-center gap-1">
+                <AmountInput
+                  autoFocus
+                  value={priceDrafts[item.id]}
+                  onChange={(v) => setPriceDrafts((prev) => ({ ...prev, [item.id]: v }))}
+                  onBlur={() => savePrice(item)}
+                  onKeyDown={(e) => e.key === "Enter" && savePrice(item)}
+                  className="h-8 text-right"
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  setPriceDrafts((prev) => ({
+                    ...prev,
+                    [item.id]: item.actualPricePoisha ? String(toMajor(item.actualPricePoisha)) : "",
+                  }))
+                }
+                className="shrink-0"
+              >
+                {item.actualPricePoisha ? (
+                  <span className="font-medium">{format(item.actualPricePoisha)}</span>
+                ) : (
+                  <Badge variant="warning">{t("needsPrice")}</Badge>
+                )}
+              </button>
+            )
+          ) : (
+            !isCompleted && (
+              <button type="button" onClick={() => removeItem(item.id)} className="shrink-0 text-muted-foreground hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )
+          )}
         </div>
 
-        {item.checked ? (
-          isEditingPrice ? (
-            <div className="flex w-28 items-center gap-1">
-              <AmountInput
-                autoFocus
-                value={priceDrafts[item.id]}
-                onChange={(v) => setPriceDrafts((prev) => ({ ...prev, [item.id]: v }))}
-                onBlur={() => savePrice(item)}
-                onKeyDown={(e) => e.key === "Enter" && savePrice(item)}
-                className="h-8 text-right"
-              />
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() =>
-                setPriceDrafts((prev) => ({
-                  ...prev,
-                  [item.id]: item.actualPricePoisha ? String(toMajor(item.actualPricePoisha)) : "",
-                }))
-              }
-              className="shrink-0"
-            >
-              {item.actualPricePoisha ? (
-                <span className="font-medium">{format(item.actualPricePoisha)}</span>
-              ) : (
-                <Badge variant="warning">{t("needsPrice")}</Badge>
-              )}
-            </button>
-          )
-        ) : (
-          !isCompleted && (
-            <button type="button" onClick={() => removeItem(item.id)} className="shrink-0 text-muted-foreground hover:text-destructive">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )
+        {item.checked && !isCompleted && (
+          <div className="ml-9">
+            {overrideItemId === item.id ? (
+              <div className="flex items-center gap-2">
+                <Select
+                  value={item.categoryId ?? categoryId}
+                  onValueChange={(v) => updateShoppingListItem(item.id, { categoryId: v })}
+                >
+                  <SelectTrigger className="h-7 w-auto min-w-0 gap-1 px-2 text-xs">
+                    <SelectValue placeholder={t("category")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SYSTEM_CATEGORIES.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={item.accountId ?? accountId}
+                  onValueChange={(v) => updateShoppingListItem(item.id, { accountId: v })}
+                >
+                  <SelectTrigger className="h-7 w-auto min-w-0 gap-1 px-2 text-xs">
+                    <SelectValue placeholder={t("account")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  type="button"
+                  onClick={() => setOverrideItemId(null)}
+                  className="text-xs text-muted-foreground underline"
+                >
+                  {t("done")}
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setOverrideItemId(item.id)}>
+                <Badge variant="secondary">
+                  {(SYSTEM_CATEGORIES.find((c) => c.id === (item.categoryId ?? categoryId))?.name ?? categoryId)} ·{" "}
+                  {(accounts.find((a) => a.id === (item.accountId ?? accountId))?.name ?? "-")}
+                </Badge>
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -215,6 +300,36 @@ export default function ShoppingListDetailPage() {
             <Button type="button" variant="secondary" onClick={addItem}>
               <Plus className="h-4 w-4" />
             </Button>
+          </div>
+        )}
+
+        {!isCompleted && checkedItems.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Label className="shrink-0 text-xs text-muted-foreground">{t("defaultFor")}</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="h-8 w-auto min-w-0 gap-1 px-2 text-xs">
+                <SelectValue placeholder={t("category")} />
+              </SelectTrigger>
+              <SelectContent>
+                {SYSTEM_CATEGORIES.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger className="h-8 w-auto min-w-0 gap-1 px-2 text-xs">
+                <SelectValue placeholder={t("account")} />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 
@@ -262,31 +377,16 @@ export default function ShoppingListDetailPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <Select value={accountId} onValueChange={setAccountId}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t("account")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accounts.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={categoryId} onValueChange={setCategoryId}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t("category")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SYSTEM_CATEGORIES.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <p className="text-xs text-muted-foreground">{t("groupsHint")}</p>
+                <div className="space-y-1 rounded-md border border-border p-2">
+                  {finishGroups.map((g) => (
+                    <div key={g.key} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {g.categoryName} · {g.accountName} ({g.count})
+                      </span>
+                      <span className="font-medium">{format(g.total)}</span>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex gap-2">
                   <Button variant="secondary" className="flex-1" onClick={() => setShowFinish(false)}>
