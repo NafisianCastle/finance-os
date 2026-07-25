@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export interface AppNotification {
   id: string;
-  type: "overdue_debt" | "overdue_loan" | "low_cash" | "budget_overspend";
+  type: "overdue_debt" | "overdue_loan" | "low_cash" | "budget_overspend" | "planned_payment_due";
   title: string;
   body: string;
   priority: "high" | "medium" | "low";

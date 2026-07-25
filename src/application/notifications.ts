@@ -1,5 +1,5 @@
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { DEBT_STATUS, LOAN_STATUS, TX_TYPES } from "@/lib/constants";
+import { DEBT_STATUS, LOAN_STATUS, TX_TYPES, PLANNED_PAYMENT_STATUS, PLANNED_PAYMENT_DIRECTION } from "@/lib/constants";
 import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { startOfMonth, endOfMonth, parseISO, isWithinInterval } from "date-fns";
 import { ymKey } from "@/lib/utils";
@@ -50,6 +50,24 @@ export async function loadNotifications(
         href: "/loans-given",
       });
     }
+  }
+
+  const plannedPayments = await db.plannedPayments
+    .where("userId")
+    .equals(userId)
+    .filter((p) => !p.deletedAt && p.status === PLANNED_PAYMENT_STATUS.ACTIVE && p.nextDueDate <= today)
+    .toArray();
+
+  for (const p of plannedPayments) {
+    const verb = p.direction === PLANNED_PAYMENT_DIRECTION.RECEIVE ? "receive" : "pay";
+    notifications.push({
+      id: `planned_payment_due_${p.id}_${p.nextDueDate}`,
+      type: "planned_payment_due",
+      title: `Planned payment due${p.counterparty ? ` — ${p.counterparty}` : ""}`,
+      body: `${p.nextDueDate < today ? "Overdue" : "Due today"} · confirm whether you ${verb}d it`,
+      priority: "high",
+      href: "/planned-payments",
+    });
   }
 
   const ym = ymKey();

@@ -53,6 +53,7 @@ export async function addTransaction(
     note: tx.note,
     tags: tx.tags,
     merchant: tx.merchant,
+    line_items: tx.lineItems,
   });
 
   return tx;
@@ -113,6 +114,7 @@ export async function updateTransaction(
     note: tx.note,
     tags: tx.tags,
     merchant: tx.merchant,
+    line_items: tx.lineItems,
   });
 
   return tx;

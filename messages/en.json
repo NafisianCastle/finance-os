@@ -151,7 +151,16 @@
     "maturityDebtDesc": "Keeping debts low and paid on time",
     "maturitySmartBuyDesc": "Following Smart Buy advice before big purchases",
     "maturityGoalsDesc": "Making progress toward your savings goals",
-    "maturityImpulseDesc": "Share of Smart Buy checks that weren't marked as impulse buys"
+    "maturityImpulseDesc": "Share of Smart Buy checks that weren't marked as impulse buys",
+    "upcomingPayments": "Upcoming payments",
+    "viewAll": "View all",
+    "dueNow": "Due now",
+    "confirmPaid": "Confirm paid",
+    "confirmReceived": "Confirm received",
+    "dueOn": "Due {date}",
+    "iPay": "I pay",
+    "iReceive": "I receive",
+    "plannedPaymentRecorded": "Payment recorded."
   },
   "Transactions": {
     "title": "Activity",
@@ -438,7 +447,8 @@
     "investments": "Investments",
     "reports": "Reports",
     "settings": "Settings",
-    "plannedPayments": "Planned payments"
+    "plannedPayments": "Planned payments",
+    "shoppingLists": "Shopping lists"
   },
   "PlannedPayments": {
     "title": "Planned payments",
@@ -464,5 +474,32 @@
     "cancel": "Cancel",
     "planAdded": "Plan added.",
     "recorded": "Recorded."
+  },
+  "ShoppingLists": {
+    "title": "Shopping lists",
+    "newList": "New shopping list",
+    "defaultName": "Market",
+    "listName": "List name",
+    "addItems": "Add items",
+    "itemPlaceholder": "e.g. Tomatoes",
+    "createList": "Create list",
+    "emptyTitle": "No shopping lists yet",
+    "emptyDescription": "Create a list before you head to the market.",
+    "itemsChecked": "{checked}/{total} in cart",
+    "active": "Active",
+    "completed": "Completed",
+    "noItems": "No items yet. Add what you need above.",
+    "needsPrice": "Add price",
+    "itemsNeedPrice": "{count} item(s) still need a price",
+    "readyToFinish": "Ready to finish",
+    "finish": "Finish shopping",
+    "account": "Account",
+    "category": "Category",
+    "cancel": "Cancel",
+    "confirmFinish": "Add expense — {amount}",
+    "finishedToast": "Expense added.",
+    "deleteList": "Delete this list",
+    "deleteListTitle": "Delete shopping list?",
+    "deleteListDescription": "This removes the list and its items. This can't be undone."
   }
 }

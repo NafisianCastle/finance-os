@@ -14,11 +14,14 @@ import { useAppStore } from "@/store/app-store";
 import { useNotificationStore } from "@/store/notification-store";
 import { getDashboardMetrics } from "@/application/analytics";
 import { loadNotifications } from "@/application/notifications";
+import { markPlannedPaymentPaid } from "@/application/planned-payments";
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
+import { useToast } from "@/components/ui/toast";
 import dynamic from "next/dynamic";
-import { Brain, AlertTriangle, X } from "lucide-react";
-import { SYSTEM_CATEGORIES } from "@/lib/constants";
+import { Brain, AlertTriangle, X, CalendarClock } from "lucide-react";
+import { SYSTEM_CATEGORIES, PLANNED_PAYMENT_DIRECTION, PLANNED_PAYMENT_STATUS } from "@/lib/constants";
+import type { PlannedPayment } from "@/infrastructure/db/dexie/schema";
 
 const IncomeExpenseTrendChart = dynamic(
   () => import("@/components/charts/dashboard-charts").then((m) => m.IncomeExpenseTrendChart),
@@ -63,7 +66,32 @@ export default function DashboardPage() {
   const notifications = useNotificationStore((s) => s.notifications);
   const markRead = useNotificationStore((s) => s.markRead);
   const readIds = useNotificationStore((s) => s.readIds);
+  const { toast } = useToast();
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof getDashboardMetrics>> | null>(null);
+  const [upcomingPayments, setUpcomingPayments] = useState<PlannedPayment[]>([]);
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  async function loadUpcomingPayments() {
+    if (!userId) return;
+    const all = await getDb()
+      .plannedPayments.where("userId")
+      .equals(userId)
+      .filter((p) => !p.deletedAt && p.status === PLANNED_PAYMENT_STATUS.ACTIVE)
+      .sortBy("nextDueDate");
+    setUpcomingPayments(all.slice(0, 3));
+  }
+
+  async function confirmPaid(plan: PlannedPayment) {
+    if (!userId) return;
+    setPayingId(plan.id);
+    try {
+      await markPlannedPaymentPaid(userId, plan);
+      toast(t("plannedPaymentRecorded"), "success");
+      loadUpcomingPayments();
+    } finally {
+      setPayingId(null);
+    }
+  }
 
   const spendBreakdown = useMemo(() => {
     if (!metrics) return [];
@@ -97,7 +125,9 @@ export default function DashboardPage() {
         .toArray();
       setMetrics(await getDashboardMetrics(userId, txs));
       setNotifications(await loadNotifications(userId, txs));
+      await loadUpcomingPayments();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, setNotifications]);
 
   if (!metrics) {
@@ -125,7 +155,9 @@ export default function DashboardPage() {
   const { netWorth, maturity, cashflow, income, expense, trend } = metrics;
 
   const overdueNotifs = notifications.filter(
-    (n) => (n.type === "overdue_debt" || n.type === "overdue_loan") && !readIds.includes(n.id)
+    (n) =>
+      (n.type === "overdue_debt" || n.type === "overdue_loan" || n.type === "planned_payment_due") &&
+      !readIds.includes(n.id)
   );
   const OVERDUE_CAP = 2;
   const visibleOverdue = overdueNotifs.slice(0, OVERDUE_CAP);
@@ -171,6 +203,49 @@ export default function DashboardPage() {
           <p className="text-xs text-muted-foreground px-1">
             {t("moreOverdue", { count: hiddenOverdueCount })}
           </p>
+        )}
+
+        {upcomingPayments.length > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                {t("upcomingPayments")}
+              </CardTitle>
+              <Link href="/planned-payments" className="text-xs text-muted-foreground hover:underline">
+                {t("viewAll")}
+              </Link>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {upcomingPayments.map((p) => {
+                const today = new Date().toISOString().slice(0, 10);
+                const isDue = p.nextDueDate <= today;
+                const isPay = p.direction === PLANNED_PAYMENT_DIRECTION.PAY;
+                return (
+                  <div key={p.id} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {p.counterparty || (isPay ? t("iPay") : t("iReceive"))}
+                      </p>
+                      <p className={`text-xs ${isDue ? "text-destructive" : "text-muted-foreground"}`}>
+                        {isDue ? t("dueNow") : t("dueOn", { date: p.nextDueDate })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-sm font-semibold ${isPay ? "text-destructive" : "text-primary"}`}>
+                        {isPay ? "-" : "+"}{format(p.amountPoisha)}
+                      </span>
+                      {isDue && (
+                        <Button size="sm" loading={payingId === p.id} onClick={() => confirmPaid(p)}>
+                          {isPay ? t("confirmPaid") : t("confirmReceived")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
         )}
 
         <div className="grid grid-cols-2 gap-3">

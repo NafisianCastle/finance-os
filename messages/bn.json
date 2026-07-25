@@ -151,7 +151,16 @@
     "maturityDebtDesc": "ঋণ কম রাখা ও সময়মতো পরিশোধ করা",
     "maturitySmartBuyDesc": "বড় খরচের আগে স্মার্ট বাই পরামর্শ মেনে চলা",
     "maturityGoalsDesc": "সঞ্চয়ের লক্ষ্যের দিকে অগ্রগতি করা",
-    "maturityImpulseDesc": "অপরিকল্পিত, আবেগতাড়িত খরচ এড়ানো"
+    "maturityImpulseDesc": "অপরিকল্পিত, আবেগতাড়িত খরচ এড়ানো",
+    "upcomingPayments": "আসন্ন পেমেন্ট",
+    "viewAll": "সব দেখুন",
+    "dueNow": "এখন বকেয়া",
+    "confirmPaid": "পরিশোধ নিশ্চিত করুন",
+    "confirmReceived": "প্রাপ্তি নিশ্চিত করুন",
+    "dueOn": "নির্ধারিত তারিখ {date}",
+    "iPay": "আমি দেব",
+    "iReceive": "আমি পাব",
+    "plannedPaymentRecorded": "পেমেন্ট রেকর্ড করা হয়েছে।"
   },
   "Transactions": {
     "title": "কার্যক্রম",
@@ -438,7 +447,8 @@
     "investments": "বিনিয়োগ",
     "reports": "রিপোর্ট",
     "settings": "সেটিংস",
-    "plannedPayments": "পরিকল্পিত পেমেন্ট"
+    "plannedPayments": "পরিকল্পিত পেমেন্ট",
+    "shoppingLists": "কেনাকাটার তালিকা"
   },
   "PlannedPayments": {
     "title": "পরিকল্পিত পেমেন্ট",
@@ -464,5 +474,32 @@
     "cancel": "বাতিল",
     "planAdded": "পরিকল্পনা যোগ করা হয়েছে।",
     "recorded": "রেকর্ড করা হয়েছে।"
+  },
+  "ShoppingLists": {
+    "title": "কেনাকাটার তালিকা",
+    "newList": "নতুন কেনাকাটার তালিকা",
+    "defaultName": "বাজার",
+    "listName": "তালিকার নাম",
+    "addItems": "আইটেম যোগ করুন",
+    "itemPlaceholder": "যেমন টমেটো",
+    "createList": "তালিকা তৈরি করুন",
+    "emptyTitle": "এখনও কোনো তালিকা নেই",
+    "emptyDescription": "বাজারে যাওয়ার আগে একটি তালিকা তৈরি করুন।",
+    "itemsChecked": "{checked}/{total} কার্টে",
+    "active": "চলমান",
+    "completed": "সম্পন্ন",
+    "noItems": "এখনও কোনো আইটেম নেই। উপরে যোগ করুন।",
+    "needsPrice": "দাম যোগ করুন",
+    "itemsNeedPrice": "{count}টি আইটেমের দাম বাকি",
+    "readyToFinish": "শেষ করতে প্রস্তুত",
+    "finish": "কেনাকাটা শেষ করুন",
+    "account": "অ্যাকাউন্ট",
+    "category": "ক্যাটাগরি",
+    "cancel": "বাতিল",
+    "confirmFinish": "খরচ যোগ করুন — {amount}",
+    "finishedToast": "খরচ যোগ করা হয়েছে।",
+    "deleteList": "এই তালিকাটি মুছুন",
+    "deleteListTitle": "কেনাকাটার তালিকা মুছবেন?",
+    "deleteListDescription": "এটি তালিকা ও তার আইটেমগুলো মুছে দেবে। এটি ফেরানো যাবে না।"
   }
 }

@@ -28,6 +28,12 @@ export interface Category extends BaseRecord {
   isSystem: boolean;
 }
 
+export interface TransactionLineItem {
+  name: string;
+  amountPoisha: number;
+  categoryId?: string;
+}
+
 export interface Transaction extends BaseRecord {
   type: number;
   amountPoisha: number;
@@ -39,6 +45,26 @@ export interface Transaction extends BaseRecord {
   tags?: string[];
   merchant?: string;
   recurringId?: string | null;
+  /** Itemized breakdown for an aggregated purchase (e.g. a market trip) */
+  lineItems?: TransactionLineItem[];
+}
+
+export interface ShoppingList extends BaseRecord {
+  name: string;
+  status: "active" | "completed";
+  linkedTransactionId?: string | null;
+}
+
+export interface ShoppingListItem extends BaseRecord {
+  listId: string;
+  name: string;
+  categoryId?: string;
+  quantity?: number;
+  unit?: string;
+  estimatedPricePoisha?: number;
+  actualPricePoisha?: number | null;
+  checked: boolean;
+  sortOrder: number;
 }
 
 export interface PlannedPayment extends BaseRecord {
