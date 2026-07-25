@@ -41,6 +41,19 @@ export interface Transaction extends BaseRecord {
   recurringId?: string | null;
 }
 
+export interface PlannedPayment extends BaseRecord {
+  direction: number;
+  amountPoisha: number;
+  accountId: string;
+  categoryId: string;
+  counterparty?: string;
+  nextDueDate: string;
+  isRecurring: boolean;
+  recurrenceInterval?: number | null;
+  status: number;
+  note?: string;
+}
+
 export interface Budget extends BaseRecord {
   ym: string;
   categoryId: string;

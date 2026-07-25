@@ -437,6 +437,32 @@
     "heldMoney": "রক্ষিত অর্থ",
     "investments": "বিনিয়োগ",
     "reports": "রিপোর্ট",
-    "settings": "সেটিংস"
+    "settings": "সেটিংস",
+    "plannedPayments": "পরিকল্পিত পেমেন্ট"
+  },
+  "PlannedPayments": {
+    "title": "পরিকল্পিত পেমেন্ট",
+    "addPlan": "পরিকল্পনা যোগ করুন",
+    "iPay": "আমি দেব",
+    "iReceive": "আমি পাব",
+    "counterparty": "প্রাপক / প্রদানকারী",
+    "counterpartyPlaceholder": "যেমন: বাড়িওয়ালা, নিয়োগকর্তা",
+    "amountLabel": "পরিমাণ ({currency})",
+    "dueDate": "পরবর্তী নির্ধারিত তারিখ",
+    "accountLabel": "অ্যাকাউন্ট",
+    "categoryLabel": "ক্যাটাগরি",
+    "recurring": "পুনরাবৃত্তি হবে",
+    "repeats": "পুনরাবৃত্তির ব্যবধান",
+    "weekly": "সাপ্তাহিক",
+    "monthly": "মাসিক",
+    "yearly": "বার্ষিক",
+    "noteLabel": "নোট",
+    "overdue": "বকেয়া",
+    "dueOn": "নির্ধারিত তারিখ {date}",
+    "markPaid": "পরিশোধিত চিহ্নিত করুন",
+    "markReceived": "প্রাপ্ত চিহ্নিত করুন",
+    "cancel": "বাতিল",
+    "planAdded": "পরিকল্পনা যোগ করা হয়েছে।",
+    "recorded": "রেকর্ড করা হয়েছে।"
   }
 }

@@ -437,6 +437,32 @@
     "heldMoney": "Held money",
     "investments": "Investments",
     "reports": "Reports",
-    "settings": "Settings"
+    "settings": "Settings",
+    "plannedPayments": "Planned payments"
+  },
+  "PlannedPayments": {
+    "title": "Planned payments",
+    "addPlan": "Add plan",
+    "iPay": "I pay",
+    "iReceive": "I receive",
+    "counterparty": "Payee / payer",
+    "counterpartyPlaceholder": "e.g. Landlord, Employer",
+    "amountLabel": "Amount ({currency})",
+    "dueDate": "Next due date",
+    "accountLabel": "Account",
+    "categoryLabel": "Category",
+    "recurring": "Repeats",
+    "repeats": "Repeat interval",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "noteLabel": "Note",
+    "overdue": "Overdue",
+    "dueOn": "Due {date}",
+    "markPaid": "Mark paid",
+    "markReceived": "Mark received",
+    "cancel": "Cancel",
+    "planAdded": "Plan added.",
+    "recorded": "Recorded."
   }
 }

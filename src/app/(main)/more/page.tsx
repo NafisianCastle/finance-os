@@ -11,6 +11,7 @@ import {
   Settings,
   FileText,
   Wallet,
+  CalendarClock,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -18,6 +19,7 @@ export default function MorePage() {
   const t = useTranslations("More");
 
   const links = [
+    { href: "/planned-payments", label: t("plannedPayments"), icon: CalendarClock },
     { href: "/smart-buy", label: t("smartBuy"), icon: Brain },
     { href: "/debt", label: t("debtManager"), icon: CreditCard },
     { href: "/loans-given", label: t("loansGiven"), icon: HandCoins },
