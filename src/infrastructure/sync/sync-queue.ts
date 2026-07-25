@@ -204,6 +204,35 @@ const REMOTE_MAPPERS: Record<
     tags: r.tags,
     merchant: r.merchant,
     recurringId: r.recurring_id,
+    lineItems: r.line_items,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  shopping_lists: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    name: r.name,
+    status: r.status,
+    linkedTransactionId: r.linked_transaction_id,
+    linkedTransactionIds: r.linked_transaction_ids,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
+  shopping_list_items: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    listId: r.list_id,
+    name: r.name,
+    categoryId: r.category_id,
+    accountId: r.account_id,
+    quantity: r.quantity,
+    unit: r.unit,
+    estimatedPricePoisha: r.estimated_price_poisha,
+    actualPricePoisha: r.actual_price_poisha,
+    checked: r.checked,
+    sortOrder: r.sort_order,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at,
@@ -321,6 +350,23 @@ const REMOTE_MAPPERS: Record<
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at,
   }),
+  planned_payments: (r) => ({
+    id: r.id,
+    userId: r.user_id,
+    direction: r.direction_smallint,
+    amountPoisha: r.amount_poisha,
+    accountId: r.account_id,
+    categoryId: r.category_id,
+    counterparty: r.counterparty,
+    nextDueDate: r.next_due_date,
+    isRecurring: r.is_recurring,
+    recurrenceInterval: r.recurrence_interval_smallint,
+    status: r.status_smallint,
+    note: r.note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at,
+  }),
 };
 
 // Dexie table name for each remote table.
@@ -336,6 +382,9 @@ const LOCAL_TABLES: Record<string, keyof ReturnType<typeof getDb>> = {
   investments: "investments",
   investment_events: "investmentEvents",
   buy_evaluations: "buyEvaluations",
+  planned_payments: "plannedPayments",
+  shopping_lists: "shoppingLists",
+  shopping_list_items: "shoppingListItems",
 };
 
 /**
@@ -662,6 +711,9 @@ const EXPORTABLE_TABLES = [
   "investments",
   "investmentEvents",
   "buyEvaluations",
+  "plannedPayments",
+  "shoppingLists",
+  "shoppingListItems",
 ] as const;
 
 /**

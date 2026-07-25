@@ -12,6 +12,9 @@ import type {
   Investment,
   InvestmentEvent,
   BuyEvaluation,
+  PlannedPayment,
+  ShoppingList,
+  ShoppingListItem,
   SyncQueueItem,
 } from "./schema";
 import { INVESTMENT_STATUS } from "@/lib/investment-constants";
@@ -29,6 +32,9 @@ export class FinanceDatabase extends Dexie {
   investments!: EntityTable<Investment, "id">;
   investmentEvents!: EntityTable<InvestmentEvent, "id">;
   buyEvaluations!: EntityTable<BuyEvaluation, "id">;
+  plannedPayments!: EntityTable<PlannedPayment, "id">;
+  shoppingLists!: EntityTable<ShoppingList, "id">;
+  shoppingListItems!: EntityTable<ShoppingListItem, "id">;
   syncQueue!: EntityTable<SyncQueueItem, "id">;
 
   constructor() {
@@ -86,6 +92,42 @@ export class FinanceDatabase extends Dexie {
           });
         }
       });
+
+    this.version(3).stores({
+      userProfiles: "id, userId",
+      accounts: "id, userId, updatedAt",
+      categories: "id, userId",
+      transactions: "id, userId, date, categoryId, updatedAt",
+      budgets: "id, userId, ym, categoryId",
+      debts: "id, userId, updatedAt",
+      loansGiven: "id, userId, updatedAt",
+      heldLiabilities: "id, userId, status, updatedAt",
+      goals: "id, userId",
+      investments: "id, userId, status, updatedAt",
+      investmentEvents: "id, userId, investmentId, eventDate, updatedAt",
+      buyEvaluations: "id, userId, updatedAt",
+      plannedPayments: "id, userId, nextDueDate, status, updatedAt",
+      syncQueue: "++id, createdAt",
+    });
+
+    this.version(4).stores({
+      userProfiles: "id, userId",
+      accounts: "id, userId, updatedAt",
+      categories: "id, userId",
+      transactions: "id, userId, date, categoryId, updatedAt",
+      budgets: "id, userId, ym, categoryId",
+      debts: "id, userId, updatedAt",
+      loansGiven: "id, userId, updatedAt",
+      heldLiabilities: "id, userId, status, updatedAt",
+      goals: "id, userId",
+      investments: "id, userId, status, updatedAt",
+      investmentEvents: "id, userId, investmentId, eventDate, updatedAt",
+      buyEvaluations: "id, userId, updatedAt",
+      plannedPayments: "id, userId, nextDueDate, status, updatedAt",
+      shoppingLists: "id, userId, status, updatedAt",
+      shoppingListItems: "id, userId, listId, checked, updatedAt",
+      syncQueue: "++id, createdAt",
+    });
   }
 }
 

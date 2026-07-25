@@ -60,6 +60,10 @@ export const BUY_RECO = {
   AVOID: 4,
 } as const;
 
+export const PLANNED_PAYMENT_DIRECTION = { PAY: 1, RECEIVE: 2 } as const;
+export const RECURRENCE_INTERVAL = { WEEKLY: 1, MONTHLY: 2, YEARLY: 3 } as const;
+export const PLANNED_PAYMENT_STATUS = { ACTIVE: 1, CANCELLED: 2 } as const;
+
 export const HELD_STATUS = { ACTIVE: 1, RETURNED: 2 } as const;
 export const DEBT_STATUS = { ACTIVE: 1, PAID: 2 } as const;
 export const LOAN_STATUS = { ACTIVE: 1, OVERDUE: 2, RECOVERED: 3 } as const;

@@ -11,6 +11,8 @@ import {
   Settings,
   FileText,
   Wallet,
+  CalendarClock,
+  ShoppingCart,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -18,6 +20,8 @@ export default function MorePage() {
   const t = useTranslations("More");
 
   const links = [
+    { href: "/shopping-lists", label: t("shoppingLists"), icon: ShoppingCart },
+    { href: "/planned-payments", label: t("plannedPayments"), icon: CalendarClock },
     { href: "/smart-buy", label: t("smartBuy"), icon: Brain },
     { href: "/debt", label: t("debtManager"), icon: CreditCard },
     { href: "/loans-given", label: t("loansGiven"), icon: HandCoins },
