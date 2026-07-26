@@ -5,6 +5,8 @@ import { BackButton } from "./back-button";
 import { BottomNav } from "./bottom-nav";
 import { SyncBadge } from "./sync-badge";
 import { NotificationCenter } from "./notification-center";
+import { HideAmountsToggle } from "./hide-amounts-toggle";
+import { GroupBadge } from "./group-badge";
 import { FloatingActionButton } from "./floating-action-button";
 import { UnsyncedWarningBanner } from "./unsynced-warning-banner";
 
@@ -17,8 +19,10 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
           <div className="flex min-w-0 items-center gap-2">
             <BackButton />
             <h1 className="truncate text-lg font-bold tracking-tight">{title ?? t("appName")}</h1>
+            <GroupBadge />
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <HideAmountsToggle />
             <NotificationCenter />
             <SyncBadge />
           </div>

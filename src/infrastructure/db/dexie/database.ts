@@ -1,4 +1,4 @@
-import Dexie, { type EntityTable } from "dexie";
+import Dexie, { type EntityTable, type Table } from "dexie";
 import type {
   UserProfile,
   Account,
@@ -16,6 +16,8 @@ import type {
   ShoppingList,
   ShoppingListItem,
   SyncQueueItem,
+  Group,
+  GroupMember,
 } from "./schema";
 import { INVESTMENT_STATUS } from "@/lib/investment-constants";
 
@@ -36,6 +38,8 @@ export class FinanceDatabase extends Dexie {
   shoppingLists!: EntityTable<ShoppingList, "id">;
   shoppingListItems!: EntityTable<ShoppingListItem, "id">;
   syncQueue!: EntityTable<SyncQueueItem, "id">;
+  groups!: EntityTable<Group, "id">;
+  groupMembers!: Table<GroupMember, [string, string]>;
 
   constructor() {
     super("FinanceOS");
@@ -126,6 +130,27 @@ export class FinanceDatabase extends Dexie {
       plannedPayments: "id, userId, nextDueDate, status, updatedAt",
       shoppingLists: "id, userId, status, updatedAt",
       shoppingListItems: "id, userId, listId, checked, updatedAt",
+      syncQueue: "++id, createdAt",
+    });
+
+    this.version(5).stores({
+      userProfiles: "id, userId",
+      accounts: "id, userId, groupId, updatedAt",
+      categories: "id, userId",
+      transactions: "id, userId, groupId, date, categoryId, updatedAt",
+      budgets: "id, userId, groupId, ym, categoryId",
+      debts: "id, userId, groupId, updatedAt",
+      loansGiven: "id, userId, groupId, updatedAt",
+      heldLiabilities: "id, userId, groupId, status, updatedAt",
+      goals: "id, userId, groupId",
+      investments: "id, userId, groupId, status, updatedAt",
+      investmentEvents: "id, userId, groupId, investmentId, eventDate, updatedAt",
+      buyEvaluations: "id, userId, groupId, updatedAt",
+      plannedPayments: "id, userId, groupId, nextDueDate, status, updatedAt",
+      shoppingLists: "id, userId, groupId, status, updatedAt",
+      shoppingListItems: "id, userId, groupId, listId, checked, updatedAt",
+      groups: "id",
+      groupMembers: "[groupId+userId], groupId, userId",
       syncQueue: "++id, createdAt",
     });
   }

@@ -10,8 +10,11 @@ import {
 } from "@/lib/money";
 import { DEFAULT_CURRENCY, DEFAULT_LOCALE } from "@/lib/constants";
 
+const MASK = "••••";
+
 export function useCurrencyFormatter() {
   const userId = useAppStore((s) => s.userId);
+  const hideAmounts = useAppStore((s) => s.hideAmounts);
   const profile = useLiveQuery(
     () =>
       userId
@@ -24,12 +27,14 @@ export function useCurrencyFormatter() {
   const locale = profile?.locale ?? DEFAULT_LOCALE;
 
   const format = useCallback(
-    (minorUnits: number) => formatMoney(minorUnits, currencyCode, locale),
-    [currencyCode, locale]
+    (minorUnits: number) =>
+      hideAmounts ? MASK : formatMoney(minorUnits, currencyCode, locale),
+    [currencyCode, locale, hideAmounts]
   );
   const formatCompact = useCallback(
-    (minorUnits: number) => formatCompactMoney(minorUnits, currencyCode, locale),
-    [currencyCode, locale]
+    (minorUnits: number) =>
+      hideAmounts ? MASK : formatCompactMoney(minorUnits, currencyCode, locale),
+    [currencyCode, locale, hideAmounts]
   );
   const toMinor = useCallback(
     (amount: number) => majorToMinorUnits(amount, currencyCode),
@@ -40,5 +45,5 @@ export function useCurrencyFormatter() {
     [currencyCode]
   );
 
-  return { currencyCode, locale, format, formatCompact, toMinor, toMajor };
+  return { currencyCode, locale, format, formatCompact, toMinor, toMajor, hideAmounts };
 }

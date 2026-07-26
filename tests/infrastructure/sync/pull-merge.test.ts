@@ -7,6 +7,7 @@ function chainableQuery(table: string) {
   const builder = {
     select: () => builder,
     eq: () => builder,
+    is: () => builder,
     gt: () => builder,
     gte: () => builder,
     order: () => builder,
@@ -51,7 +52,7 @@ describe("pullRemoteChanges merge", () => {
   it("inserts a remote row with no local counterpart", async () => {
     tableData.accounts = [remoteAccount()];
 
-    const count = await pullRemoteChanges(USER_ID, null);
+    const count = await pullRemoteChanges(USER_ID, null, null);
 
     expect(count).toBe(1);
     const local = await getDb().accounts.get("acc-1");
@@ -73,7 +74,7 @@ describe("pullRemoteChanges merge", () => {
     await enqueueSync("accounts", "acc-1", "upsert", { name: "Stale Cash" });
     tableData.accounts = [remoteAccount({ name: "Synced Cash", balance_poisha: 20000 })];
 
-    const count = await pullRemoteChanges(USER_ID, null);
+    const count = await pullRemoteChanges(USER_ID, null, null);
 
     expect(count).toBe(1);
     const local = await db.accounts.get("acc-1");
@@ -96,7 +97,7 @@ describe("pullRemoteChanges merge", () => {
     });
     tableData.accounts = [remoteAccount({ name: "Older Remote", updated_at: "2026-01-15T00:00:00Z" })];
 
-    const count = await pullRemoteChanges(USER_ID, null);
+    const count = await pullRemoteChanges(USER_ID, null, null);
 
     expect(count).toBe(0);
     const local = await db.accounts.get("acc-1");

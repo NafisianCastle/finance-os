@@ -17,6 +17,20 @@ const UNIQUE_CONFLICT_TARGETS: Record<string, string> = {
   user_profiles: "user_id",
 };
 
+// Grouped rows use a separate unique constraint (one shared budget per
+// group+month+category instead of per-author) — see migration 011.
+const GROUPED_UNIQUE_CONFLICT_TARGETS: Record<string, string> = {
+  budgets: "group_id,ym_char6,category_id",
+};
+
+// Tables that carry a group_id column (migration 011). user_profiles and
+// categories are intentionally excluded — see that migration's header.
+const GROUP_SCOPED_TABLES = new Set([
+  "accounts", "transactions", "budgets", "debts", "loans_given",
+  "held_liabilities", "goals", "investments", "investment_events",
+  "buy_evaluations", "planned_payments", "shopping_lists", "shopping_list_items",
+]);
+
 export async function enqueueSync(
   table: string,
   recordId: string,
@@ -91,7 +105,8 @@ export async function repairAccountSync(userId: string) {
 const SYNC_CHUNK_SIZE = 50;
 
 export async function processSyncQueue(
-  userId: string
+  userId: string,
+  groupId: string | null = null
 ): Promise<{ pushed: number; errors: number; lastError?: string }> {
   const supabase = createClient();
   if (!supabase) return { pushed: 0, errors: 0 };
@@ -130,16 +145,31 @@ export async function processSyncQueue(
       const chunk = groupItems.slice(i, i + SYNC_CHUNK_SIZE);
       const now = new Date().toISOString();
 
+      const isGroupScoped = groupId && GROUP_SCOPED_TABLES.has(table);
+
       const { error } =
         operation === "delete"
-          ? await supabase
-              .from(table)
-              .update({ deleted_at: now })
-              .in("id", chunk.map((c) => c.recordId))
-              .eq("user_id", userId)
+          ? await (() => {
+              const del = supabase
+                .from(table)
+                .update({ deleted_at: now })
+                .in("id", chunk.map((c) => c.recordId));
+              // Grouped rows can be authored by any member, so a deleting
+              // member filters by the shared group scope, not their own
+              // user_id (which would silently skip teammates' rows).
+              return isGroupScoped ? del.eq("group_id", groupId) : del.eq("user_id", userId);
+            })()
           : await (() => {
-              const rows = chunk.map((c) => ({ ...c.payload, id: c.recordId, user_id: userId, updated_at: now }));
-              const onConflict = UNIQUE_CONFLICT_TARGETS[table];
+              const rows = chunk.map((c) => ({
+                ...c.payload,
+                id: c.recordId,
+                user_id: userId,
+                ...(GROUP_SCOPED_TABLES.has(table) ? { group_id: groupId } : {}),
+                updated_at: now,
+              }));
+              const onConflict = isGroupScoped
+                ? GROUPED_UNIQUE_CONFLICT_TARGETS[table] ?? UNIQUE_CONFLICT_TARGETS[table]
+                : UNIQUE_CONFLICT_TARGETS[table];
               return onConflict
                 ? supabase.from(table).upsert(rows, { onConflict })
                 : supabase.from(table).upsert(rows);
@@ -396,6 +426,7 @@ const LOCAL_TABLES: Record<string, keyof ReturnType<typeof getDb>> = {
  */
 export async function pullRemoteChanges(
   userId: string,
+  groupId: string | null,
   lastSyncedAt: string | null
 ): Promise<number> {
   const supabase = createClient();
@@ -421,15 +452,24 @@ export async function pullRemoteChanges(
     // rows past the cap and this loop's caller advances lastSyncedAt
     // regardless, so under-paging here means permanent data loss for users
     // with >SYNC_BATCH_SIZE changes since their last sync.
+    const isGroupScoped = groupId && GROUP_SCOPED_TABLES.has(table);
+
     let cursor = since;
     for (;;) {
       let query = supabase
         .from(table)
         .select("*")
-        .eq("user_id", userId)
         .gt("updated_at", cursor)
         .order("updated_at", { ascending: true })
         .limit(SYNC_BATCH_SIZE);
+      // Grouped: see everything shared in the group. Ungrouped: only the
+      // user's own not-yet-shared personal rows (explicit is_ null keeps
+      // intent clear rather than relying solely on RLS for correctness).
+      query = isGroupScoped
+        ? query.eq("group_id", groupId)
+        : GROUP_SCOPED_TABLES.has(table)
+          ? query.eq("user_id", userId).is("group_id", null)
+          : query.eq("user_id", userId);
 
       // New-device hydration: keep transactions to a recent rolling window so
       // the first sync stays fast; older months load lazily on demand (see
@@ -442,7 +482,8 @@ export async function pullRemoteChanges(
       if (error || !data) break;
 
       for (const remoteRow of data) {
-        const mapped = mapper(remoteRow) as { id: string; updatedAt: string };
+        const mapped = mapper(remoteRow) as { id: string; updatedAt: string; groupId?: string | null };
+        if (GROUP_SCOPED_TABLES.has(table)) mapped.groupId = (remoteRow.group_id as string | null) ?? null;
         const existing = await localTable.get(mapped.id);
         if (existing && existing.updatedAt >= mapped.updatedAt) continue;
 
@@ -471,6 +512,7 @@ export async function pullRemoteChanges(
  */
 export async function pullHistoricalTransactions(
   userId: string,
+  groupId: string | null,
   beforeDate?: string
 ): Promise<{ count: number; oldestDate: string | null }> {
   const supabase = createClient();
@@ -483,13 +525,17 @@ export async function pullHistoricalTransactions(
       .toISOString()
       .slice(0, 10);
 
-  const { data, error } = await supabase
+  let historyQuery = supabase
     .from("transactions")
     .select("*")
-    .eq("user_id", userId)
     .lt("tx_date", cutoff)
     .order("tx_date", { ascending: false })
     .limit(HISTORICAL_PULL_BATCH_SIZE);
+  historyQuery = groupId
+    ? historyQuery.eq("group_id", groupId)
+    : historyQuery.eq("user_id", userId).is("group_id", null);
+
+  const { data, error } = await historyQuery;
 
   if (error || !data || data.length === 0) return { count: 0, oldestDate: null };
 
@@ -503,7 +549,9 @@ export async function pullHistoricalTransactions(
       id: string;
       updatedAt: string;
       date: string;
+      groupId?: string | null;
     };
+    mapped.groupId = (remoteRow.group_id as string | null) ?? null;
     const existing = await localTable.get(mapped.id);
     if (!existing || existing.updatedAt < mapped.updatedAt) {
       await localTable.put(mapped as never);
@@ -591,7 +639,7 @@ export async function mergeDuplicateAccounts(
     // re-pushed over the merge, then refresh Dexie from the merged state.
     const db = getDb();
     await db.syncQueue.filter((i) => i.table === "accounts" || i.table === "transactions").delete();
-    await pullRemoteChanges(userId, null);
+    await pullRemoteChanges(userId, null, null);
   }
 
   return { merged, groups: groupsAffected };
@@ -660,7 +708,7 @@ export async function mergeDuplicateGoals(
   if (groupsAffected > 0) {
     const db = getDb();
     await db.syncQueue.filter((i) => i.table === "goals").delete();
-    await pullRemoteChanges(userId, null);
+    await pullRemoteChanges(userId, null, null);
   }
 
   return { merged, groups: groupsAffected };
@@ -681,7 +729,7 @@ export async function repairLocalBudgets(userId: string): Promise<void> {
   const local = await db.budgets.where("userId").equals(userId).toArray();
   await db.budgets.bulkDelete(local.map((b) => b.id));
   await db.syncQueue.filter((i) => i.table === "budgets").delete();
-  await pullRemoteChanges(userId, null);
+  await pullRemoteChanges(userId, null, null);
 }
 
 /**
@@ -691,10 +739,11 @@ export async function repairLocalBudgets(userId: string): Promise<void> {
  * partial state it's stuck in.
  */
 export async function forceFullResync(
-  userId: string
+  userId: string,
+  groupId: string | null = null
 ): Promise<{ pushed: number; errors: number; pulled: number }> {
-  const { pushed, errors } = await processSyncQueue(userId);
-  const pulled = await pullRemoteChanges(userId, null);
+  const { pushed, errors } = await processSyncQueue(userId, groupId);
+  const pulled = await pullRemoteChanges(userId, groupId, null);
   return { pushed, errors, pulled };
 }
 
@@ -721,13 +770,18 @@ const EXPORTABLE_TABLES = [
  * the escape hatch if sync is broken: the user's full ledger is never
  * trapped behind a working sync pipeline, they can always get it out.
  */
-export async function exportUserDataAsJson(userId: string): Promise<Record<string, unknown[]>> {
+export async function exportUserDataAsJson(
+  userId: string,
+  groupId: string | null = null
+): Promise<Record<string, unknown[]>> {
   const db = getDb();
   const out: Record<string, unknown[]> = {};
   for (const table of EXPORTABLE_TABLES) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = await (db as any)[table].where("userId").equals(userId).toArray();
-    out[table] = rows;
+    const all = await (db as any)[table].toArray();
+    out[table] = groupId
+      ? all.filter((r: { userId: string; groupId?: string | null }) => r.userId === userId || r.groupId === groupId)
+      : all.filter((r: { userId: string }) => r.userId === userId);
   }
   return out;
 }

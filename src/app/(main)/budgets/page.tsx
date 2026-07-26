@@ -78,7 +78,7 @@ export default function BudgetsPage() {
     if (isSupabaseConfigured()) {
       const localBudgetCount = await db.budgets.where("userId").equals(userId).count();
       const lastSyncedAt = localBudgetCount === 0 ? null : useAppStore.getState().lastSyncedAt;
-      await pullRemoteChanges(userId, lastSyncedAt);
+      await pullRemoteChanges(userId, useAppStore.getState().groupId, lastSyncedAt);
     }
 
     // Load categories

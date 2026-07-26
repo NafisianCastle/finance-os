@@ -38,10 +38,11 @@ export function SyncOnFocus() {
       try {
         // Low-battery/throttled devices can stall a network call indefinitely
         // — bound each phase so a hung request doesn't block sync forever.
-        await withTimeout(processSyncQueue(uid), SYNC_TIMEOUT_MS);
+        const gid = useAppStore.getState().groupId;
+        await withTimeout(processSyncQueue(uid, gid), SYNC_TIMEOUT_MS);
         const lastSyncedAt = useAppStore.getState().lastSyncedAt;
         const syncStartedAt = new Date().toISOString();
-        await withTimeout(pullRemoteChanges(uid, lastSyncedAt), SYNC_TIMEOUT_MS);
+        await withTimeout(pullRemoteChanges(uid, gid, lastSyncedAt), SYNC_TIMEOUT_MS);
         useAppStore.getState().setLastSyncedAt(syncStartedAt);
         const count = await getDb().syncQueue.count();
         setPending(count);

@@ -5,6 +5,7 @@ import { majorToMinorUnits } from "@/lib/money";
 import type { UserProfile, Account, Category } from "@/infrastructure/db/dexie/schema";
 import { enqueueSync, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
+import { useAppStore } from "@/store/app-store";
 
 export async function seedUserData(
   userId: string,
@@ -21,7 +22,7 @@ export async function seedUserData(
   // seeding fresh default accounts, otherwise a user who already onboarded on
   // another browser gets duplicate "Cash"/"Bank" accounts created here.
   if (!existing?.onboardingComplete && isSupabaseConfigured()) {
-    await pullRemoteChanges(userId, null);
+    await pullRemoteChanges(userId, useAppStore.getState().groupId, null);
     existing = await db.userProfiles.where("userId").equals(userId).first();
   }
 

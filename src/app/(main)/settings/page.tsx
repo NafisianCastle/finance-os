@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/app-shell";
+import { GroupSettingsCard } from "@/components/group-settings-card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
   const setUserId = useAppStore((s) => s.setUserId);
+  const groupId = useAppStore((s) => s.groupId);
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -254,7 +256,7 @@ export default function SettingsPage() {
     if (!userId) return;
     setSyncing(true);
     await repairAccountSync(userId);
-    const { pushed, errors, lastError } = await processSyncQueue(userId);
+    const { pushed, errors, lastError } = await processSyncQueue(userId, groupId);
     const msg =
       errors > 0
         ? t("syncResultWithErrors", { pushed, errors, lastError: lastError ?? "" })
@@ -292,7 +294,7 @@ export default function SettingsPage() {
   async function handleForceResync() {
     if (!userId) return;
     setSyncing(true);
-    const { pushed, errors, pulled } = await forceFullResync(userId);
+    const { pushed, errors, pulled } = await forceFullResync(userId, groupId);
     setSyncing(false);
     toast(
       errors > 0
@@ -306,7 +308,7 @@ export default function SettingsPage() {
     if (!userId) return;
     setExportingData(true);
     try {
-      const data = await exportUserDataAsJson(userId);
+      const data = await exportUserDataAsJson(userId, groupId);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -566,6 +568,8 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        <GroupSettingsCard />
 
         <Card>
           <CardContent className="pt-4 space-y-3">

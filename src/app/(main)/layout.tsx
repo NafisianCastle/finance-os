@@ -52,7 +52,7 @@ export default function MainLayout({
       // before concluding onboarding hasn't happened, otherwise this redirects
       // to /onboarding and reseeds duplicate default accounts.
       if (!profile?.onboardingComplete && authConfigured) {
-        await pullRemoteChanges(userId, null);
+        await pullRemoteChanges(userId, useAppStore.getState().groupId, null);
         profile = await db.userProfiles.where("userId").equals(userId).first();
       }
 

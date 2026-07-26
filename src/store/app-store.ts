@@ -7,11 +7,15 @@ interface AppState {
   pendingSyncCount: number;
   isSyncing: boolean;
   hasHydrated: boolean;
+  hideAmounts: boolean;
+  groupId: string | null;
   setUserId: (id: string | null) => void;
   setLastSyncedAt: (at: string) => void;
   setPendingSyncCount: (n: number) => void;
   setIsSyncing: (syncing: boolean) => void;
   setHasHydrated: (hydrated: boolean) => void;
+  toggleHideAmounts: () => void;
+  setGroupId: (groupId: string | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -22,15 +26,24 @@ export const useAppStore = create<AppState>()(
       pendingSyncCount: 0,
       isSyncing: false,
       hasHydrated: false,
+      hideAmounts: false,
+      groupId: null,
       setUserId: (userId) => set({ userId }),
       setLastSyncedAt: (lastSyncedAt) => set({ lastSyncedAt }),
       setPendingSyncCount: (pendingSyncCount) => set({ pendingSyncCount }),
       setIsSyncing: (isSyncing) => set({ isSyncing }),
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
+      toggleHideAmounts: () => set((s) => ({ hideAmounts: !s.hideAmounts })),
+      setGroupId: (groupId) => set({ groupId }),
     }),
     {
       name: "finance-os-app",
-      partialize: (s) => ({ userId: s.userId, lastSyncedAt: s.lastSyncedAt }),
+      partialize: (s) => ({
+        userId: s.userId,
+        lastSyncedAt: s.lastSyncedAt,
+        hideAmounts: s.hideAmounts,
+        groupId: s.groupId,
+      }),
       onRehydrateStorage: () => (state) => state?.setHasHydrated(true),
     }
   )

@@ -156,7 +156,7 @@ describe("processSyncQueue", () => {
 
 describe("pullHistoricalTransactions", () => {
   it("returns zero when Supabase isn't configured", async () => {
-    const result = await pullHistoricalTransactions(USER_ID);
+    const result = await pullHistoricalTransactions(USER_ID, null);
     expect(result).toEqual({ count: 0, oldestDate: null });
   });
 
@@ -171,7 +171,7 @@ describe("pullHistoricalTransactions", () => {
     });
     mockState.client = mock.client;
 
-    const result = await pullHistoricalTransactions(USER_ID, "2025-02-01");
+    const result = await pullHistoricalTransactions(USER_ID, null, "2025-02-01");
     expect(result.count).toBe(2);
     expect(result.oldestDate).toBe("2025-01-05");
     expect((await getDb().transactions.get("t1"))?.amountPoisha).toBe(1000);

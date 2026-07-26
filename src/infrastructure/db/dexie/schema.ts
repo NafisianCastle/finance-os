@@ -1,10 +1,28 @@
 export interface BaseRecord {
   id: string;
   userId: string;
+  /** Household group this row is shared with, if any. Absent/null = personal. */
+  groupId?: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
   syncStatus?: "pending" | "synced" | "error";
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  inviteCode: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupMember {
+  groupId: string;
+  userId: string;
+  role: "owner" | "member";
+  joinedAt: string;
 }
 
 export interface UserProfile extends BaseRecord {
