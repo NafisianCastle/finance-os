@@ -54,6 +54,8 @@ declare
   v_code text;
   v_group groups;
   v_attempt int := 0;
+  v_bytes bytea;
+  v_idx int;
 begin
   if v_uid is null then
     raise exception 'not_authenticated' using errcode = '28000';
@@ -68,8 +70,14 @@ begin
   loop
     v_attempt := v_attempt + 1;
     v_code := '';
-    for i in 1..8 loop
-      v_code := v_code || substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1);
+    -- CSPRNG bytes: gen_random_uuid() (core since PG13) draws from
+    -- pg_strong_random. random() is predictable, and the code is the only
+    -- secret gating group membership. Bytes 6 and 8 carry the UUID
+    -- version/variant bits, so take bytes 0-5 and 10-11. 256 % 32 = 0, so
+    -- the modulo is unbiased over the 32-char alphabet.
+    v_bytes := uuid_send(gen_random_uuid());
+    foreach v_idx in array array[0, 1, 2, 3, 4, 5, 10, 11] loop
+      v_code := v_code || substr(v_chars, 1 + get_byte(v_bytes, v_idx) % length(v_chars), 1);
     end loop;
     begin
       insert into groups (name, invite_code, created_by)

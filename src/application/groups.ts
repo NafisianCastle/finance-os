@@ -51,10 +51,10 @@ function toGroupError(error: { message?: string; code?: string } | null): GroupE
 }
 
 function generateInviteCode(): string {
+  // Cryptographic randomness: the code is the only secret gating membership.
+  const bytes = crypto.getRandomValues(new Uint8Array(INVITE_CODE_LENGTH));
   let code = "";
-  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
-    code += INVITE_CODE_CHARS[Math.floor(Math.random() * INVITE_CODE_CHARS.length)];
-  }
+  for (const b of bytes) code += INVITE_CODE_CHARS[b % INVITE_CODE_CHARS.length];
   return code;
 }
 
