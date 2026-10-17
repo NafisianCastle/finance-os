@@ -10,6 +10,7 @@ function chainableQuery(table: string) {
     is: () => builder,
     gt: () => builder,
     gte: () => builder,
+    or: () => builder,
     order: () => builder,
     limit: () => builder,
     then: (resolve: (v: { data: unknown; error: null }) => void) =>

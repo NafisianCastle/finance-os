@@ -13,7 +13,9 @@ import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import type { Group, GroupMember } from "@/infrastructure/db/dexie/schema";
 import {
   createGroup,
+  deleteGroup,
   getCachedGroup,
+  GroupError,
   getMyGroup,
   joinGroupByCode,
   leaveGroup,
@@ -59,6 +61,24 @@ export function GroupSettingsCard() {
   if (!loaded) return null;
 
   const isOwner = members.find((m) => m.userId === userId)?.role === "owner";
+
+  function errorMessage(e: unknown): string {
+    if (e instanceof GroupError) {
+      switch (e.code) {
+        case "already_in_group":
+          return t("errorAlreadyInGroup");
+        case "invalid_invite_code":
+          return t("errorInvalidInviteCode");
+        case "invalid_group_name":
+          return t("errorInvalidGroupName");
+        case "not_owner":
+          return t("errorNotOwner");
+        default:
+          return t("groupActionFailed");
+      }
+    }
+    return e instanceof Error ? e.message : t("groupActionFailed");
+  }
   const inviteLink =
     typeof window !== "undefined" && group
       ? `${window.location.origin}/join?code=${group.inviteCode}`
@@ -74,7 +94,7 @@ export function GroupSettingsCard() {
       setGroupName("");
       toast(t("groupCreated"), "success");
     } catch (e) {
-      toast(e instanceof Error ? e.message : t("groupActionFailed"), "error");
+      toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }
@@ -91,7 +111,7 @@ export function GroupSettingsCard() {
       setInviteCodeInput("");
       toast(t("groupJoined"), "success");
     } catch (e) {
-      toast(e instanceof Error ? e.message : t("groupActionFailed"), "error");
+      toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }
@@ -105,7 +125,7 @@ export function GroupSettingsCard() {
       setGroup({ ...group, inviteCode: code });
       toast(t("inviteCodeRegenerated"), "success");
     } catch (e) {
-      toast(e instanceof Error ? e.message : t("groupActionFailed"), "error");
+      toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }
@@ -127,7 +147,29 @@ export function GroupSettingsCard() {
       setMembers([]);
       toast(t("groupLeft"), "success");
     } catch (e) {
-      toast(e instanceof Error ? e.message : t("groupActionFailed"), "error");
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!userId || !group) return;
+    const ok = await confirm({
+      title: t("deleteGroupTitle"),
+      description: t("deleteGroupDescription"),
+      confirmLabel: t("delete"),
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await deleteGroup(userId, group.id);
+      setGroup(null);
+      setMembers([]);
+      toast(t("groupDeleted"), "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }
@@ -147,7 +189,7 @@ export function GroupSettingsCard() {
       setMembers((prev) => prev.filter((m) => m.userId !== targetUserId));
       toast(t("memberRemoved"), "success");
     } catch (e) {
-      toast(e instanceof Error ? e.message : t("groupActionFailed"), "error");
+      toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }
@@ -240,6 +282,11 @@ export function GroupSettingsCard() {
         <Button variant="destructive" className="w-full" onClick={handleLeave} loading={busy}>
           {t("leaveGroup")}
         </Button>
+        {isOwner && (
+          <Button variant="outline" className="w-full text-destructive" onClick={handleDelete} loading={busy}>
+            {t("deleteGroup")}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

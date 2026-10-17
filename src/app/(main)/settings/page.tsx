@@ -294,8 +294,12 @@ export default function SettingsPage() {
   async function handleForceResync() {
     if (!userId) return;
     setSyncing(true);
-    const { pushed, errors, pulled } = await forceFullResync(userId, groupId);
+    const { pushed, errors, pulled, pullError } = await forceFullResync(userId, groupId);
     setSyncing(false);
+    if (pullError) {
+      toast(t("resyncPullFailed", { pushed, message: pullError }), "error");
+      return;
+    }
     toast(
       errors > 0
         ? t("resyncResultWithErrors", { pushed, pulled, errors })
@@ -349,6 +353,9 @@ export default function SettingsPage() {
     if (!ok) return;
     setRepairing(true);
     await resetLocalDatabase();
+    // The local DB is gone, so the old group and pull checkpoint are stale —
+    // keeping lastSyncedAt would make the next pull skip everything older.
+    useAppStore.getState().clearSyncState();
     setUserId(null);
     router.push("/onboarding");
   }
@@ -366,6 +373,9 @@ export default function SettingsPage() {
 
     setLoggingOut(true);
     try {
+      // Group membership and the pull checkpoint belong to this account;
+      // the next sign-in (maybe a different account) starts fresh.
+      useAppStore.getState().clearSyncState();
       if (isSupabaseConfigured()) {
         const supabase = createClient();
         if (supabase) {

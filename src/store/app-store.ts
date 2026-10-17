@@ -10,12 +10,14 @@ interface AppState {
   hideAmounts: boolean;
   groupId: string | null;
   setUserId: (id: string | null) => void;
-  setLastSyncedAt: (at: string) => void;
+  setLastSyncedAt: (at: string | null) => void;
   setPendingSyncCount: (n: number) => void;
   setIsSyncing: (syncing: boolean) => void;
   setHasHydrated: (hydrated: boolean) => void;
   toggleHideAmounts: () => void;
   setGroupId: (groupId: string | null) => void;
+  /** Forget per-account sync state (group + pull checkpoint) — call on logout/reset. */
+  clearSyncState: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -35,6 +37,7 @@ export const useAppStore = create<AppState>()(
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       toggleHideAmounts: () => set((s) => ({ hideAmounts: !s.hideAmounts })),
       setGroupId: (groupId) => set({ groupId }),
+      clearSyncState: () => set({ groupId: null, lastSyncedAt: null }),
     }),
     {
       name: "finance-os-app",
