@@ -590,7 +590,7 @@
     "plannedPaymentOverduePayBody": "{dueDate} থেকে বকেয়া · পরিশোধ করেছেন কিনা নিশ্চিত করুন",
     "plannedPaymentOverdueReceiveBody": "{dueDate} থেকে বকেয়া · পেয়েছেন কিনা নিশ্চিত করুন",
     "budgetOverspentTitle": "বাজেট ছাড়িয়ে গেছে — {category}",
-    "budgetOverspentBody": "এই মাসে {allocated}-এর মধ্যে {spent} খরচ হয়েছে",
+    "budgetOverspentBody": "এই মাসে বরাদ্দের চেয়ে বেশি খরচ হয়েছে",
     "budgetNearLimitTitle": "বাজেট প্রায় শেষ — {category}",
     "budgetNearLimitBody": "এই মাসের বাজেটের {percent}% খরচ হয়েছে",
     "lowBudgetHealthTitle": "বাজেটের অবস্থা দুর্বল",

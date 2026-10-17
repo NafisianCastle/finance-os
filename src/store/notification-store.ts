@@ -3,18 +3,16 @@ import { create } from "zustand";
 export interface AppNotification {
   id: string;
   type: "overdue_debt" | "overdue_loan" | "low_cash" | "budget_overspend" | "planned_payment_due";
-  /** English fallback text, used when titleKey/bodyKey are absent. */
-  title: string;
-  body: string;
-  /** Key in the `Notifications` message namespace; preferred over `title`. */
-  titleKey?: string;
-  /** Key in the `Notifications` message namespace; preferred over `body`. */
-  bodyKey?: string;
-  /**
-   * ICU params for titleKey/bodyKey. A `categoryId` param is resolved to a
-   * localized category name and passed as `category` by the notification center.
-   */
-  params?: Record<string, string | number>;
+  /** i18n key in the "Notifications" namespace. */
+  titleKey: string;
+  /** i18n key in the "Notifications" namespace. */
+  bodyKey: string;
+  /** ICU params for titleKey/bodyKey. `category` holds a raw category id the UI should localise. */
+  params: Record<string, string | number>;
+  /** @deprecated Pre-i18n English text; no longer emitted. Kept optional so old renderers compile. */
+  title?: string;
+  /** @deprecated Pre-i18n English text; no longer emitted. */
+  body?: string;
   priority: "high" | "medium" | "low";
   href?: string;
 }

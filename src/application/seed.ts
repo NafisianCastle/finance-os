@@ -79,6 +79,7 @@ export async function seedUserData(
 
   await enqueueSync("user_profiles", profile.id, "upsert", {
     id: profile.id,
+    user_id: profile.userId,
     monthly_income_poisha: profile.monthlyIncomePoisha,
     currency_code: profile.currencyCode,
     locale: profile.locale,
@@ -89,6 +90,8 @@ export async function seedUserData(
   for (const acc of accounts) {
     await enqueueSync("accounts", acc.id, "upsert", {
       id: acc.id,
+      user_id: acc.userId,
+      group_id: null,
       type_smallint: acc.type,
       name: acc.name,
       balance_poisha: acc.balancePoisha,

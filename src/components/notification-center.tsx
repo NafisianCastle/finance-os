@@ -36,7 +36,7 @@ export function useNotificationText() {
       }
       const tr = (key: string | undefined, fallback: string) =>
         key && t.has(key) ? t(key, params) : fallback;
-      return { title: tr(n.titleKey, n.title), body: tr(n.bodyKey, n.body) };
+      return { title: tr(n.titleKey, n.title ?? ""), body: tr(n.bodyKey, n.body ?? "") };
     },
     [t, categoryName],
   );

@@ -590,7 +590,7 @@
     "plannedPaymentOverduePayBody": "Overdue since {dueDate} · confirm whether you paid it",
     "plannedPaymentOverdueReceiveBody": "Overdue since {dueDate} · confirm whether you received it",
     "budgetOverspentTitle": "Over budget — {category}",
-    "budgetOverspentBody": "Spent {spent} of {allocated} this month",
+    "budgetOverspentBody": "Spent more than allocated this month",
     "budgetNearLimitTitle": "Budget almost used — {category}",
     "budgetNearLimitBody": "{percent}% of this month's budget spent",
     "lowBudgetHealthTitle": "Budget health is low",
