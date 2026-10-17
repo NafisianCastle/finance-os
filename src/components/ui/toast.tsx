@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, Info, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 
 type ToastVariant = "success" | "error" | "info";
@@ -31,6 +32,7 @@ const STYLES: Record<ToastVariant, string> = {
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("Common");
   const [items, setItems] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
 
@@ -61,8 +63,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <Icon className="mt-0.5 h-4 w-4 shrink-0" />
               <span className="flex-1">{item.message}</span>
               <button
+                type="button"
                 onClick={() => dismiss(item.id)}
-                aria-label="Dismiss"
+                aria-label={t("dismiss")}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" />

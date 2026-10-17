@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 
 export default function ErrorPage({
@@ -10,21 +11,21 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations("Errors");
   useEffect(() => {
     console.error(error);
   }, [error]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-xl font-semibold">Something went wrong</h1>
+      <h1 className="text-xl font-semibold">{t("title")}</h1>
       <p className="max-w-sm text-sm text-muted-foreground">
-        Your local data is safe — it lives on this device and syncs when this
-        is fixed. Try again, or reload the page.
+        {t("description")}
       </p>
       <div className="flex gap-2">
-        <Button onClick={() => reset()}>Try again</Button>
+        <Button onClick={() => reset()}>{t("tryAgain")}</Button>
         <Button variant="outline" onClick={() => window.location.assign("/")}>
-          Reload
+          {t("reload")}
         </Button>
       </div>
     </div>

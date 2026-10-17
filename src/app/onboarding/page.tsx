@@ -13,13 +13,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES, SUPPORTED_UI_LOCALES } from "@/lib/constants";
+import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
+import { consumePostAuthPath } from "@/lib/pending-join";
 import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
+import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function OnboardingPage() {
   const t = useTranslations("Onboarding");
+  const tAuth = useTranslations("Auth");
   const currentLocale = useLocale();
   const router = useRouter();
   const setUserId = useAppStore((s) => s.setUserId);
@@ -31,12 +35,15 @@ export default function OnboardingPage() {
 
   async function handleStart() {
     setLoading(true);
-    const currentUserId = userId ?? LOCAL_USER_ID;
-    setUserId(currentUserId);
-    await seedUserData(currentUserId, parseFloat(income) || 20000, currency, uiLocale);
-    document.cookie = `NEXT_LOCALE=${uiLocale}; path=/; max-age=31536000`;
-    setLoading(false);
-    router.push("/dashboard");
+    try {
+      const currentUserId = userId ?? LOCAL_USER_ID;
+      setUserId(currentUserId);
+      await seedUserData(currentUserId, parseFloat(income) || 20000, currency, uiLocale);
+      document.cookie = `NEXT_LOCALE=${uiLocale}; path=/; max-age=31536000`;
+      router.push(consumePostAuthPath());
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -97,6 +104,14 @@ export default function OnboardingPage() {
           <p className="text-center text-xs text-muted-foreground">
             {t("worksOffline")}
           </p>
+          {(!userId || userId === LOCAL_USER_ID) && isSupabaseConfigured() && (
+            <p className="text-center text-sm text-muted-foreground">
+              {tAuth("alreadyHaveAccount")}{" "}
+              <Link href="/login" className="text-primary underline">
+                {tAuth("login")}
+              </Link>
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

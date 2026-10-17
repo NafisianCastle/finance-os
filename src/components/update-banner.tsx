@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 /**
@@ -13,6 +14,7 @@ import { useEffect, useState } from "react";
  * in-progress transaction entry isn't interrupted.
  */
 export function UpdateBanner() {
+  const t = useTranslations("Banners");
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
@@ -27,14 +29,14 @@ export function UpdateBanner() {
 
   return (
     <div className="sticky top-0 z-50 flex items-center justify-between gap-2 bg-primary px-4 py-2 text-sm text-primary-foreground">
-      <span>A new version is available.</span>
+      <span>{t("updateAvailable")}</span>
       <Button
         size="sm"
         variant="secondary"
         onClick={() => window.location.reload()}
       >
         <RefreshCw className="h-3.5 w-3.5" />
-        Refresh
+        {t("refresh")}
       </Button>
     </div>
   );

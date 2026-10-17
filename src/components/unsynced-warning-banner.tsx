@@ -4,6 +4,7 @@ import { getDb } from "@/infrastructure/db/dexie/database";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import { useAppStore } from "@/store/app-store";
 import { AlertTriangle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 // iOS can silently evict IndexedDB/service worker storage after ~7 days of
@@ -13,6 +14,7 @@ import { useEffect, useState } from "react";
 const WARN_AFTER_MS = 1000 * 60 * 60 * 24;
 
 export function UnsyncedWarningBanner() {
+  const t = useTranslations("Banners");
   const pendingSyncCount = useAppStore((s) => s.pendingSyncCount);
   const [oldestAgeMs, setOldestAgeMs] = useState<number | null>(null);
 
@@ -39,11 +41,7 @@ export function UnsyncedWarningBanner() {
   return (
     <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-      <p>
-        You have {pendingSyncCount} unsynced change{pendingSyncCount === 1 ? "" : "s"}, oldest from{" "}
-        {days} day{days === 1 ? "" : "s"} ago. Connect to the internet and open the app to back them
-        up — data isn&apos;t safe from loss until it syncs.
-      </p>
+      <p>{t("unsyncedWarning", { count: pendingSyncCount, days })}</p>
     </div>
   );
 }

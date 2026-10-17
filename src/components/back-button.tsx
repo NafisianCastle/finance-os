@@ -2,10 +2,12 @@
 
 import { ArrowLeft } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 const ROOT_PATHS = ["/dashboard", "/transactions", "/budgets", "/goals", "/more"];
 
 export function BackButton() {
+  const t = useTranslations("Common");
   const router = useRouter();
   const pathname = usePathname();
 
@@ -15,7 +17,7 @@ export function BackButton() {
     <button
       type="button"
       onClick={() => router.back()}
-      aria-label="Go back"
+      aria-label={t("goBack")}
       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-sm"
     >
       <ArrowLeft className="h-5 w-5" />
