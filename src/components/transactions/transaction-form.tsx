@@ -75,9 +75,7 @@ export function TransactionForm({
     if (!userId) return;
     scoped(getDb().accounts, userId, groupId)
       .toArray()
-      .then((rows) => {
-        // scoped() infers Dexie's InsertType (optional id) from EntityTable.
-        const a = rows as Account[];
+      .then((a) => {
         setAccounts(a);
         const sourceId = initial?.accountId ?? a[0]?.id;
         if (!initial && sourceId) setAccountId(sourceId);

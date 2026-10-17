@@ -27,8 +27,8 @@ export function isVisible(row: Scopable, userId: string, groupId: string | null 
 }
 
 /** Non-deleted rows visible to `userId` in `groupId` (see isVisible). */
-export function scoped<T extends Scopable>(
-  table: Table<T, string>,
+export function scoped<T extends Scopable, TInsert = T>(
+  table: Table<T, string, TInsert>,
   userId: string,
   groupId: string | null = null,
 ) {
