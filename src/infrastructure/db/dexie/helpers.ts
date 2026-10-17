@@ -8,9 +8,9 @@ export function dbPut<T>(table: Table<T, string>, record: T): Promise<string> {
   return table.put(record as any) as Promise<string>;
 }
 
-export async function getBudgetsForMonth(userId: string, ym: string) {
-  return getDb()
-    .budgets.filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt)
+export async function getBudgetsForMonth(userId: string, ym: string, groupId: string | null = null) {
+  return scoped(getDb().budgets, userId, groupId)
+    .and((b) => b.ym === ym)
     .toArray();
 }
 
@@ -27,8 +27,8 @@ export function isVisible(row: Scopable, userId: string, groupId: string | null 
 }
 
 /** Non-deleted rows visible to `userId` in `groupId` (see isVisible). */
-export function scoped<T extends Scopable>(
-  table: Table<T, string>,
+export function scoped<T extends Scopable, TInsert = T>(
+  table: Table<T, string, TInsert>,
   userId: string,
   groupId: string | null = null,
 ) {

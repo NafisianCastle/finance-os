@@ -60,9 +60,9 @@ describe("addInvestmentEvent", () => {
       eventDate: "2026-02-01",
     });
 
-    const stored = await getDb().investmentEvents.get(ev.id);
+    const stored = await getDb().investmentEvents.get(ev!.id);
     expect(stored?.amountPoisha).toBe(5_000);
-    const queued = await getDb().syncQueue.filter((i) => i.table === "investment_events" && i.recordId === ev.id).toArray();
+    const queued = await getDb().syncQueue.filter((i) => i.table === "investment_events" && i.recordId === ev!.id).toArray();
     expect(queued).toHaveLength(1);
   });
 

@@ -1,23 +1,31 @@
 import { getDb } from "@/infrastructure/db/dexie/database";
-import { DEBT_STATUS, LOAN_STATUS, TX_TYPES, PLANNED_PAYMENT_STATUS, PLANNED_PAYMENT_DIRECTION } from "@/lib/constants";
+import { getBudgetsForMonth, scoped } from "@/infrastructure/db/dexie/helpers";
+import { DEBT_STATUS, TX_TYPES, PLANNED_PAYMENT_STATUS, PLANNED_PAYMENT_DIRECTION } from "@/lib/constants";
 import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { startOfMonth, endOfMonth, parseISO, isWithinInterval } from "date-fns";
 import { ymKey } from "@/lib/utils";
+import { isLoanOverdue } from "@/application/loans-given";
 import type { AppNotification } from "@/store/notification-store";
 import type { Transaction } from "@/infrastructure/db/dexie/schema";
 
+/**
+ * Builds the notification list over own personal rows + rows shared with
+ * `groupId`. Text is returned as i18n keys in the "Notifications" namespace
+ * (`titleKey`/`bodyKey` + `params`); the UI translates them. Budget
+ * notifications carry the raw category id in `params.category` — the UI
+ * should swap in the localised category name before formatting.
+ */
 export async function loadNotifications(
   userId: string,
-  preloadedTransactions?: Transaction[]
+  preloadedTransactions?: Transaction[],
+  groupId: string | null = null
 ): Promise<AppNotification[]> {
   const db = getDb();
   const today = new Date().toISOString().slice(0, 10);
   const notifications: AppNotification[] = [];
 
-  const debts = await db.debts
-    .where("userId")
-    .equals(userId)
-    .filter((d) => !d.deletedAt && d.status === DEBT_STATUS.ACTIVE)
+  const debts = await scoped(db.debts, userId, groupId)
+    .and((d) => d.status === DEBT_STATUS.ACTIVE)
     .toArray();
 
   for (const d of debts) {
@@ -25,60 +33,62 @@ export async function loadNotifications(
       notifications.push({
         id: `overdue_debt_${d.id}`,
         type: "overdue_debt",
-        title: `Overdue debt — ${d.lender}`,
-        body: `Due ${d.dueDate} · still unpaid`,
+        titleKey: "overdueDebtTitle",
+        bodyKey: "overdueDebtBody",
+        params: { lender: d.lender, dueDate: d.dueDate },
         priority: "high",
         href: "/debt",
       });
     }
   }
 
-  const loans = await db.loansGiven
-    .where("userId")
-    .equals(userId)
-    .filter((l) => !l.deletedAt && l.status !== LOAN_STATUS.RECOVERED)
+  const loans = await scoped(db.loansGiven, userId, groupId)
+    .and((l) => isLoanOverdue(l, today))
     .toArray();
 
   for (const l of loans) {
-    if (l.dueDate && l.dueDate < today) {
-      notifications.push({
-        id: `overdue_loan_${l.id}`,
-        type: "overdue_loan",
-        title: `Loan overdue — ${l.borrower}`,
-        body: `Due ${l.dueDate} · not yet recovered`,
-        priority: "high",
-        href: "/loans-given",
-      });
-    }
+    notifications.push({
+      id: `overdue_loan_${l.id}`,
+      type: "overdue_loan",
+      titleKey: "overdueLoanTitle",
+      bodyKey: "overdueLoanBody",
+      params: { borrower: l.borrower, dueDate: l.dueDate ?? "" },
+      priority: "high",
+      href: "/loans-given",
+    });
   }
 
-  const plannedPayments = await db.plannedPayments
-    .where("userId")
-    .equals(userId)
-    .filter((p) => !p.deletedAt && p.status === PLANNED_PAYMENT_STATUS.ACTIVE && p.nextDueDate <= today)
+  const plannedPayments = await scoped(db.plannedPayments, userId, groupId)
+    .and((p) => p.status === PLANNED_PAYMENT_STATUS.ACTIVE && p.nextDueDate <= today)
     .toArray();
 
   for (const p of plannedPayments) {
-    const verb = p.direction === PLANNED_PAYMENT_DIRECTION.RECEIVE ? "receive" : "pay";
+    const receive = p.direction === PLANNED_PAYMENT_DIRECTION.RECEIVE;
+    const overdue = p.nextDueDate < today;
+    const bodyKey = overdue
+      ? receive
+        ? "plannedOverdueReceiveBody"
+        : "plannedOverduePayBody"
+      : receive
+        ? "plannedDueTodayReceiveBody"
+        : "plannedDueTodayPayBody";
     notifications.push({
       id: `planned_payment_due_${p.id}_${p.nextDueDate}`,
       type: "planned_payment_due",
-      title: `Planned payment due${p.counterparty ? ` — ${p.counterparty}` : ""}`,
-      body: `${p.nextDueDate < today ? "Overdue" : "Due today"} · confirm whether you ${verb}d it`,
+      titleKey: p.counterparty ? "plannedDueTitleWithCounterparty" : "plannedDueTitle",
+      bodyKey,
+      params: { counterparty: p.counterparty ?? "", dueDate: p.nextDueDate },
       priority: "high",
       href: "/planned-payments",
     });
   }
 
   const ym = ymKey();
-  const budgets = await db.budgets
-    .filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt)
-    .toArray();
+  const budgets = await getBudgetsForMonth(userId, ym, groupId);
 
-  const txs = (
-    preloadedTransactions ??
-    (await db.transactions.where("userId").equals(userId).filter((t) => !t.deletedAt).toArray())
-  ).filter((t) => t.type === TX_TYPES.EXPENSE);
+  const txs = (preloadedTransactions ?? (await scoped(db.transactions, userId, groupId).toArray())).filter(
+    (t) => t.type === TX_TYPES.EXPENSE && !t.deletedAt
+  );
 
   const start = startOfMonth(new Date());
   const end = endOfMonth(new Date());
@@ -93,10 +103,11 @@ export async function loadNotifications(
     const t = b.allocatedPoisha + b.carryPoisha;
     if (t > 0 && s > t * 1.1) {
       notifications.push({
-        id: `budget_overspend_${b.categoryId}_${ym}`,
+        id: `budget_overspend_${b.categoryId}_${ym}${b.groupId ? `_${b.groupId}` : ""}`,
         type: "budget_overspend",
-        title: `Over budget — ${b.categoryId}`,
-        body: `Spent more than allocated this month`,
+        titleKey: "budgetOverspendTitle",
+        bodyKey: "budgetOverspendBody",
+        params: { category: b.categoryId },
         priority: "medium",
         href: "/budgets",
       });
@@ -112,8 +123,9 @@ export async function loadNotifications(
     notifications.push({
       id: `low_budget_health_${ym}`,
       type: "budget_overspend",
-      title: "Budget health is low",
-      body: `Overall budget adherence at ${health}% this month`,
+      titleKey: "lowBudgetHealthTitle",
+      bodyKey: "lowBudgetHealthBody",
+      params: { health },
       priority: "medium",
       href: "/budgets",
     });
