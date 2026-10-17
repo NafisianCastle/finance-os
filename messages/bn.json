@@ -35,7 +35,9 @@
     "groupLeft": "পরিবার ত্যাগ করেছেন",
     "memberRemoved": "সদস্য সরানো হয়েছে",
     "inviteCodeRegenerated": "নতুন আমন্ত্রণ কোড তৈরি হয়েছে",
-    "groupActionFailed": "কিছু ভুল হয়েছে। আবার চেষ্টা করুন।"
+    "groupActionFailed": "কিছু ভুল হয়েছে। আবার চেষ্টা করুন।",
+    "shareWithGroup": "গ্রুপের সাথে শেয়ার করুন",
+    "shared": "শেয়ার করা"
   },
   "Nav": {
     "home": "হোম",

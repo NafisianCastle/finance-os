@@ -35,7 +35,9 @@
     "groupLeft": "Left household",
     "memberRemoved": "Member removed",
     "inviteCodeRegenerated": "Invite code regenerated",
-    "groupActionFailed": "Something went wrong. Please try again."
+    "groupActionFailed": "Something went wrong. Please try again.",
+    "shareWithGroup": "Share with group",
+    "shared": "Shared"
   },
   "Nav": {
     "home": "Home",
