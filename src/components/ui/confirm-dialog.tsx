@@ -2,6 +2,7 @@
 
 import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 import { createContext, useCallback, useContext, useState } from "react";
 
 interface ConfirmOptions {
@@ -18,6 +19,7 @@ interface ConfirmContextValue {
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
 export function ConfirmDialogProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("Common");
   const [state, setState] = useState<{
     options: ConfirmOptions;
     resolve: (value: boolean) => void;
@@ -49,14 +51,14 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
             )}
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => close(false)}>
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 variant={state?.options.variant === "destructive" ? "destructive" : "default"}
                 size="sm"
                 onClick={() => close(true)}
               >
-                {state?.options.confirmLabel ?? "Confirm"}
+                {state?.options.confirmLabel ?? t("confirm")}
               </Button>
             </div>
           </Dialog.Content>

@@ -40,7 +40,8 @@ export default function SignupPage() {
     restoreSession();
   }, [router, setUserId]);
 
-  async function handleSignup() {
+  async function handleSignup(e: React.FormEvent) {
+    e.preventDefault();
     setError("");
     if (!isSupabaseConfigured()) {
       setError(t("notConfigured"));
@@ -84,43 +85,47 @@ export default function SignupPage() {
         <CardHeader>
           <CardTitle className="text-2xl">{t("createAccount")}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">{t("email")}</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t("password")}</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button
-            className="w-full"
-            onClick={handleSignup}
-            disabled={!email || !password}
-            loading={loading}
-          >
-            {loading ? t("creatingAccount") : t("signUp")}
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            {t("alreadyHaveAccount")}{" "}
-            <Link href="/login" className="text-primary underline">
-              {t("login")}
-            </Link>
-            .
-          </p>
+        <CardContent>
+          <form onSubmit={handleSignup} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">{t("email")}</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">{t("password")}</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                placeholder="••••••••"
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!email || !password}
+              loading={loading}
+            >
+              {loading ? t("creatingAccount") : t("signUp")}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {t("alreadyHaveAccount")}{" "}
+              <Link href="/login" className="text-primary underline">
+                {t("login")}
+              </Link>
+              .
+            </p>
+          </form>
         </CardContent>
       </Card>
     </div>

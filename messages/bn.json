@@ -6,7 +6,10 @@
     "delete": "মুছুন",
     "add": "যোগ করুন",
     "hideAmounts": "পরিমাণ লুকান",
-    "showAmounts": "পরিমাণ দেখান"
+    "showAmounts": "পরিমাণ দেখান",
+    "confirm": "নিশ্চিত করুন",
+    "goBack": "পিছনে যান",
+    "dismiss": "বন্ধ করুন"
   },
   "Groups": {
     "title": "পারিবারিক গ্রুপ",
@@ -68,7 +71,20 @@
     "signUp": "সাইন আপ",
     "creatingAccount": "অ্যাকাউন্ট তৈরি হচ্ছে…",
     "alreadyHaveAccount": "আগে থেকেই অ্যাকাউন্ট আছে?",
-    "signupIncomplete": "অ্যাকাউন্ট তৈরি হয়েছে। এটি নিশ্চিত করতে আপনার ইমেইল দেখুন, তারপর লগ ইন করুন।"
+    "signupIncomplete": "অ্যাকাউন্ট তৈরি হয়েছে। এটি নিশ্চিত করতে আপনার ইমেইল দেখুন, তারপর লগ ইন করুন।",
+    "forgotPassword": "পাসওয়ার্ড ভুলে গেছেন?",
+    "enterEmailForReset": "উপরে আপনার ইমেইল লিখুন, তারপর আবার \"পাসওয়ার্ড ভুলে গেছেন?\" চাপুন।",
+    "resetEmailSent": "পাসওয়ার্ড রিসেট করার লিংকের জন্য আপনার ইমেইল দেখুন।",
+    "resetPasswordTitle": "নতুন পাসওয়ার্ড সেট করুন",
+    "newPassword": "নতুন পাসওয়ার্ড",
+    "confirmPassword": "নতুন পাসওয়ার্ড নিশ্চিত করুন",
+    "updatePassword": "পাসওয়ার্ড আপডেট করুন",
+    "updatingPassword": "আপডেট হচ্ছে…",
+    "passwordsDontMatch": "পাসওয়ার্ড দুটি মেলেনি।",
+    "passwordTooShort": "পাসওয়ার্ড কমপক্ষে {min} অক্ষরের হতে হবে।",
+    "resetLinkInvalid": "এই রিসেট লিংকটি অবৈধ বা মেয়াদোত্তীর্ণ। লগইন পেজ থেকে নতুন লিংক চান।",
+    "verifyingResetLink": "রিসেট লিংক যাচাই করা হচ্ছে…",
+    "backToLogin": "লগইনে ফিরে যান"
   },
   "Settings": {
     "title": "সেটিংস",
@@ -479,7 +495,15 @@
     "merchantPlaceholder": "যেমন Shajgoj, Pathao",
     "noteLabel": "নোট",
     "save": "সংরক্ষণ করুন",
-    "editTitle": "লেনদেন সম্পাদনা করুন"
+    "editTitle": "লেনদেন সম্পাদনা করুন",
+    "fromAccountLabel": "যে অ্যাকাউন্ট থেকে",
+    "toAccountLabel": "যে অ্যাকাউন্টে",
+    "selectAccount": "একটি অ্যাকাউন্ট নির্বাচন করুন",
+    "errorAccountRequired": "একটি অ্যাকাউন্ট নির্বাচন করুন।",
+    "errorAmountPositive": "পরিমাণ শূন্যের বেশি হতে হবে।",
+    "errorToAccountRequired": "যে অ্যাকাউন্টে স্থানান্তর করবেন সেটি নির্বাচন করুন।",
+    "errorSameAccount": "উৎস ও গন্তব্য অ্যাকাউন্ট ভিন্ন হতে হবে।",
+    "saveFailed": "লেনদেন সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।"
   },
   "More": {
     "title": "আরও",
@@ -547,5 +571,77 @@
     "deleteList": "এই তালিকাটি মুছুন",
     "deleteListTitle": "কেনাকাটার তালিকা মুছবেন?",
     "deleteListDescription": "এটি তালিকা ও তার আইটেমগুলো মুছে দেবে। এটি ফেরানো যাবে না।"
+  },
+  "Notifications": {
+    "title": "নোটিফিকেশন",
+    "markAllRead": "সবগুলো পঠিত চিহ্নিত করুন",
+    "total": "মোট {count}টি",
+    "ariaLabelUnread": "নোটিফিকেশন ({count}টি অপঠিত)",
+    "overdueDebtTitle": "বকেয়া ঋণ — {lender}",
+    "overdueDebtBody": "নির্ধারিত তারিখ {dueDate} · এখনও পরিশোধ হয়নি",
+    "debtDueSoonTitle": "ঋণ পরিশোধের সময় ঘনিয়ে এসেছে — {lender}",
+    "debtDueSoonBody": "নির্ধারিত তারিখ {dueDate}",
+    "overdueLoanTitle": "ধার ফেরত বকেয়া — {borrower}",
+    "overdueLoanBody": "নির্ধারিত তারিখ {dueDate} · এখনও ফেরত পাওয়া যায়নি",
+    "plannedPaymentDueTitle": "পরিকল্পিত পেমেন্টের সময় হয়েছে",
+    "plannedPaymentDueTitleWithParty": "পরিকল্পিত পেমেন্টের সময় হয়েছে — {counterparty}",
+    "plannedPaymentDueTodayPayBody": "আজ নির্ধারিত · পরিশোধ করেছেন কিনা নিশ্চিত করুন",
+    "plannedPaymentDueTodayReceiveBody": "আজ নির্ধারিত · পেয়েছেন কিনা নিশ্চিত করুন",
+    "plannedPaymentOverduePayBody": "{dueDate} থেকে বকেয়া · পরিশোধ করেছেন কিনা নিশ্চিত করুন",
+    "plannedPaymentOverdueReceiveBody": "{dueDate} থেকে বকেয়া · পেয়েছেন কিনা নিশ্চিত করুন",
+    "budgetOverspentTitle": "বাজেট ছাড়িয়ে গেছে — {category}",
+    "budgetOverspentBody": "এই মাসে {allocated}-এর মধ্যে {spent} খরচ হয়েছে",
+    "budgetNearLimitTitle": "বাজেট প্রায় শেষ — {category}",
+    "budgetNearLimitBody": "এই মাসের বাজেটের {percent}% খরচ হয়েছে",
+    "lowBudgetHealthTitle": "বাজেটের অবস্থা দুর্বল",
+    "lowBudgetHealthBody": "এই মাসে সামগ্রিক বাজেট মেনে চলার হার {health}%",
+    "goalDeadlineTitle": "লক্ষ্যের সময়সীমা ঘনিয়ে আসছে — {goal}",
+    "goalDeadlineBody": "সময়সীমা {deadline} · {percent}% সঞ্চিত",
+    "goalOverdueTitle": "লক্ষ্যের সময়সীমা পেরিয়ে গেছে — {goal}",
+    "goalOverdueBody": "সময়সীমা ছিল {deadline} · {percent}% সঞ্চিত",
+    "heldMoneyTitle": "{person}-এর টাকা আপনার কাছে আছে",
+    "heldMoneyBody": "{amount} রাখা আছে — এটি আপনার খরচযোগ্য টাকা নয়",
+    "lowCashTitle": "নগদ টাকা কম থাকার পূর্বাভাস",
+    "lowCashBody": "এই মাসের খরচ পর্যালোচনা করুন"
+  },
+  "Categories": {
+    "food": "খাবার",
+    "transport": "যাতায়াত",
+    "shopping": "কেনাকাটা",
+    "gadgets": "গ্যাজেট",
+    "entertainment": "বিনোদন",
+    "bills": "বিল",
+    "family": "পরিবার",
+    "education": "শিক্ষা",
+    "health": "স্বাস্থ্য",
+    "savings": "সঞ্চয়",
+    "investment": "বিনিয়োগ",
+    "income": "আয়",
+    "other": "অন্যান্য"
+  },
+  "SmartBuyReasons": {
+    "incomeRatioHigh": "মাসিক আয়ের {ratioPct}% খরচ হবে",
+    "gadgetCapExceeded": "গ্যাজেটের সামর্থ্যসীমা ছাড়িয়ে যায় (আয়ের সর্বোচ্চ {capPct}%)",
+    "categoryCapExceeded": "এই বিভাগের সামর্থ্যসীমা ছাড়িয়ে যায় (আয়ের সর্বোচ্চ {capPct}%)",
+    "budgetOverflow": "এই মাসে বিভাগের বাকি বাজেট ছাড়িয়ে যায়",
+    "liquidFloorBreach": "তরল সঞ্চয় এক মাসের খরচের নিচে নেমে যাবে",
+    "dtiStress": "ঋণ-আয় অনুপাত {dtiPct}% — বড় কেনাকাটা চাপ বাড়াবে",
+    "goalDelay": "প্রধান সঞ্চয় লক্ষ্য প্রায় {monthsDelayed} মাস পিছিয়ে যাবে",
+    "impulseLuxury": "আবেগপ্রবণ বিলাসী কেনাকাটা — শৃঙ্খলা ভঙ্গের ঝুঁকি বেশি",
+    "categorySpendUp": "সাম্প্রতিক গড়ের তুলনায় এই বিভাগে খরচ {trendPct}% বেড়েছে",
+    "emergencyImpact": "জরুরি তহবিলের অগ্রগতিতে উল্লেখযোগ্য প্রভাব ফেলে",
+    "safeWithinBand": "আপনার আয়ের তুলনায় স্বাস্থ্যকর সামর্থ্যসীমার মধ্যে",
+    "fallback": "আর্থিক বিষয় বিবেচনা করা হয়েছে"
+  },
+  "Banners": {
+    "unsyncedWarning": "আপনার {count, plural, one {#টি} other {#টি}} পরিবর্তন সিঙ্ক হয়নি, সবচেয়ে পুরোনোটি {days, plural, one {# দিন} other {# দিন}} আগের। ব্যাকআপ নিতে ইন্টারনেটে সংযুক্ত হয়ে অ্যাপটি খুলুন — সিঙ্ক না হওয়া পর্যন্ত ডেটা হারানোর ঝুঁকি থাকে।",
+    "updateAvailable": "নতুন সংস্করণ পাওয়া যাচ্ছে।",
+    "refresh": "রিফ্রেশ করুন"
+  },
+  "Errors": {
+    "title": "কিছু একটা ভুল হয়েছে",
+    "description": "আপনার লোকাল ডেটা নিরাপদ — এটি এই ডিভাইসে আছে এবং সমস্যা ঠিক হলে সিঙ্ক হবে। আবার চেষ্টা করুন, অথবা পেজটি রিলোড করুন।",
+    "tryAgain": "আবার চেষ্টা করুন",
+    "reload": "রিলোড করুন"
   }
 }

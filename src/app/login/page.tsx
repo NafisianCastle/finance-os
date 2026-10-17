@@ -8,6 +8,7 @@ import {
   createClient,
   isSupabaseConfigured,
 } from "@/infrastructure/supabase/client";
+import { consumePostAuthPath } from "@/lib/pending-join";
 import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -23,6 +24,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -38,15 +41,41 @@ export default function LoginPage() {
       const { data } = await supabase.auth.getSession();
       if (data.session?.user?.id) {
         setUserId(data.session.user.id);
-        router.replace("/dashboard");
+        router.replace(consumePostAuthPath());
       }
     }
 
     restoreSession();
   }, [userId, router, setUserId]);
 
-  async function handleLogin() {
+  async function handleForgotPassword() {
     setError("");
+    setInfo("");
+    if (!email) {
+      setError(t("enterEmailForReset"));
+      return;
+    }
+    const supabase = createClient();
+    if (!supabase) {
+      setError(t("notConfigured"));
+      return;
+    }
+    setResetting(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (resetError) setError(resetError.message);
+      else setInfo(t("resetEmailSent"));
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setInfo("");
     if (!isSupabaseConfigured()) {
       setError(t("notConfigured"));
       return;
@@ -73,7 +102,7 @@ export default function LoginPage() {
     }
 
     setUserId(data.session.user.id);
-    router.push("/dashboard");
+    router.push(consumePostAuthPath());
   }
 
   return (
@@ -82,43 +111,58 @@ export default function LoginPage() {
         <CardHeader>
           <CardTitle className="text-2xl">{t("login")}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">{t("email")}</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t("password")}</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button
-            className="w-full"
-            onClick={handleLogin}
-            disabled={!email || !password}
-            loading={loading}
-          >
-            {loading ? t("loggingIn") : t("login")}
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            {t("newHere")}{" "}
-            <Link href="/signup" className="text-primary underline">
-              {t("createAccount")}
-            </Link>
-            .
-          </p>
+        <CardContent>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">{t("email")}</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">{t("password")}</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetting}
+                className="text-sm text-primary underline disabled:opacity-50"
+              >
+                {t("forgotPassword")}
+              </button>
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {info && <p className="text-sm text-muted-foreground">{info}</p>}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!email || !password}
+              loading={loading}
+            >
+              {loading ? t("loggingIn") : t("login")}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {t("newHere")}{" "}
+              <Link href="/signup" className="text-primary underline">
+                {t("createAccount")}
+              </Link>
+              .
+            </p>
+          </form>
         </CardContent>
       </Card>
     </div>

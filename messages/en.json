@@ -6,7 +6,10 @@
     "delete": "Delete",
     "add": "Add",
     "hideAmounts": "Hide amounts",
-    "showAmounts": "Show amounts"
+    "showAmounts": "Show amounts",
+    "confirm": "Confirm",
+    "goBack": "Go back",
+    "dismiss": "Dismiss"
   },
   "Groups": {
     "title": "Household group",
@@ -68,7 +71,20 @@
     "signUp": "Sign up",
     "creatingAccount": "Creating account…",
     "alreadyHaveAccount": "Already have an account?",
-    "signupIncomplete": "Account created. Check your email to confirm it, then log in to continue."
+    "signupIncomplete": "Account created. Check your email to confirm it, then log in to continue.",
+    "forgotPassword": "Forgot password?",
+    "enterEmailForReset": "Enter your email above, then tap \"Forgot password?\" again.",
+    "resetEmailSent": "Check your email for a link to reset your password.",
+    "resetPasswordTitle": "Set a new password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "updatePassword": "Update password",
+    "updatingPassword": "Updating…",
+    "passwordsDontMatch": "Passwords don't match.",
+    "passwordTooShort": "Password must be at least {min} characters.",
+    "resetLinkInvalid": "This reset link is invalid or has expired. Request a new one from the login page.",
+    "verifyingResetLink": "Verifying reset link…",
+    "backToLogin": "Back to login"
   },
   "Settings": {
     "title": "Settings",
@@ -479,7 +495,15 @@
     "merchantPlaceholder": "e.g. Shajgoj, Pathao",
     "noteLabel": "Note",
     "save": "Save",
-    "editTitle": "Edit transaction"
+    "editTitle": "Edit transaction",
+    "fromAccountLabel": "From account",
+    "toAccountLabel": "To account",
+    "selectAccount": "Select an account",
+    "errorAccountRequired": "Choose an account.",
+    "errorAmountPositive": "Amount must be greater than zero.",
+    "errorToAccountRequired": "Choose the account to transfer to.",
+    "errorSameAccount": "Source and destination accounts must be different.",
+    "saveFailed": "Couldn't save the transaction. Please try again."
   },
   "More": {
     "title": "More",
@@ -547,5 +571,77 @@
     "deleteList": "Delete this list",
     "deleteListTitle": "Delete shopping list?",
     "deleteListDescription": "This removes the list and its items. This can't be undone."
+  },
+  "Notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "total": "{count} total",
+    "ariaLabelUnread": "Notifications ({count} unread)",
+    "overdueDebtTitle": "Overdue debt — {lender}",
+    "overdueDebtBody": "Due {dueDate} · still unpaid",
+    "debtDueSoonTitle": "Debt due soon — {lender}",
+    "debtDueSoonBody": "Due {dueDate}",
+    "overdueLoanTitle": "Loan overdue — {borrower}",
+    "overdueLoanBody": "Due {dueDate} · not yet recovered",
+    "plannedPaymentDueTitle": "Planned payment due",
+    "plannedPaymentDueTitleWithParty": "Planned payment due — {counterparty}",
+    "plannedPaymentDueTodayPayBody": "Due today · confirm whether you paid it",
+    "plannedPaymentDueTodayReceiveBody": "Due today · confirm whether you received it",
+    "plannedPaymentOverduePayBody": "Overdue since {dueDate} · confirm whether you paid it",
+    "plannedPaymentOverdueReceiveBody": "Overdue since {dueDate} · confirm whether you received it",
+    "budgetOverspentTitle": "Over budget — {category}",
+    "budgetOverspentBody": "Spent {spent} of {allocated} this month",
+    "budgetNearLimitTitle": "Budget almost used — {category}",
+    "budgetNearLimitBody": "{percent}% of this month's budget spent",
+    "lowBudgetHealthTitle": "Budget health is low",
+    "lowBudgetHealthBody": "Overall budget adherence at {health}% this month",
+    "goalDeadlineTitle": "Goal deadline approaching — {goal}",
+    "goalDeadlineBody": "Due {deadline} · {percent}% saved",
+    "goalOverdueTitle": "Goal deadline passed — {goal}",
+    "goalOverdueBody": "Deadline was {deadline} · {percent}% saved",
+    "heldMoneyTitle": "Holding money for {person}",
+    "heldMoneyBody": "{amount} held — not part of your spendable cash",
+    "lowCashTitle": "Low cash forecast",
+    "lowCashBody": "Review spending this month"
+  },
+  "Categories": {
+    "food": "Food",
+    "transport": "Transport",
+    "shopping": "Shopping",
+    "gadgets": "Gadgets",
+    "entertainment": "Entertainment",
+    "bills": "Bills",
+    "family": "Family",
+    "education": "Education",
+    "health": "Health",
+    "savings": "Savings",
+    "investment": "Investment",
+    "income": "Income",
+    "other": "Other"
+  },
+  "SmartBuyReasons": {
+    "incomeRatioHigh": "Costs {ratioPct}% of monthly income",
+    "gadgetCapExceeded": "Exceeds gadget affordability threshold (max {capPct}% of income)",
+    "categoryCapExceeded": "Exceeds category affordability threshold (max {capPct}% of income)",
+    "budgetOverflow": "Exceeds remaining category budget for this month",
+    "liquidFloorBreach": "Would drop liquid savings below one month of expenses",
+    "dtiStress": "Debt-to-income is {dtiPct}% — large purchase adds pressure",
+    "goalDelay": "Delays primary savings goal by ~{monthsDelayed} months",
+    "impulseLuxury": "Impulse luxury purchase — high discipline risk",
+    "categorySpendUp": "Category spending up {trendPct}% vs recent average",
+    "emergencyImpact": "Significantly impacts emergency fund progress",
+    "safeWithinBand": "Within healthy affordability band for your income",
+    "fallback": "Financial factor considered"
+  },
+  "Banners": {
+    "unsyncedWarning": "You have {count, plural, one {# unsynced change} other {# unsynced changes}}, oldest from {days, plural, one {# day} other {# days}} ago. Connect to the internet and open the app to back them up — data isn't safe from loss until it syncs.",
+    "updateAvailable": "A new version is available.",
+    "refresh": "Refresh"
+  },
+  "Errors": {
+    "title": "Something went wrong",
+    "description": "Your local data is safe — it lives on this device and syncs when this is fixed. Try again, or reload the page.",
+    "tryAgain": "Try again",
+    "reload": "Reload"
   }
 }
