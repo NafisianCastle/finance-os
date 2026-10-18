@@ -23,10 +23,14 @@ export function IncomeExpenseTrendChart({
   data,
   format,
   formatCompact,
+  incomeLabel,
+  expenseLabel,
 }: {
   data: { month: string; income: number; expense: number }[];
   format: (minorUnits: number) => string;
   formatCompact: (minorUnits: number) => string;
+  incomeLabel?: string;
+  expenseLabel?: string;
 }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -34,8 +38,8 @@ export function IncomeExpenseTrendChart({
         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
         <YAxis tickFormatter={(v) => formatCompact(v as number)} tick={{ fontSize: 10 }} />
         <Tooltip formatter={(v) => format(Number(v ?? 0))} />
-        <Bar dataKey="income" fill="hsl(160 84% 32%)" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="expense" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="income" name={incomeLabel} fill="hsl(160 84% 32%)" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="expense" name={expenseLabel} fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

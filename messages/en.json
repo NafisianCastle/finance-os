@@ -219,7 +219,12 @@
     "dueOn": "Due {date}",
     "iPay": "I pay",
     "iReceive": "I receive",
-    "plannedPaymentRecorded": "Payment recorded."
+    "plannedPaymentRecorded": "Payment recorded.",
+    "maturityLevel_Poor": "Poor",
+    "maturityLevel_Improving": "Improving",
+    "maturityLevel_Stable": "Stable",
+    "maturityLevel_Disciplined": "Disciplined",
+    "maturityLevel_Wealth Builder": "Wealth Builder"
   },
   "Transactions": {
     "title": "Activity",
@@ -228,7 +233,13 @@
     "emptyDescription": "Add your first income or expense to start tracking.",
     "delete": "Delete transaction",
     "deleteConfirm": "Delete this transaction? This cannot be undone.",
-    "notFound": "Transaction not found."
+    "notFound": "Transaction not found.",
+    "loadOlder": "Load older transactions",
+    "loadOlderFailed": "Couldn't load older transactions. Please try again.",
+    "noOlderTransactions": "No older transactions to load.",
+    "transferRoute": "{from} → {to}",
+    "unknownAccount": "Unknown account",
+    "transfer": "Transfer"
   },
   "Budgets": {
     "title": "Budgets",
@@ -262,7 +273,9 @@
     "budgetDeleted": "Budget \"{name}\" deleted.",
     "selectCategory": "Please select a category",
     "budgetAlreadyExists": "Budget already exists for this category. Use Edit instead.",
-    "budgetAdded": "Budget added."
+    "budgetAdded": "Budget added.",
+    "budgetExistsShared": "This category already has a shared household budget this month. Edit that one instead.",
+    "budgetExistsPersonal": "You already have a personal budget for this category this month. Edit or remove it first."
   },
   "Debt": {
     "title": "Debt",
@@ -480,7 +493,18 @@
     "overspentOn": "Overspent on {category}",
     "maturityLevel": "Maturity level: {level}",
     "lowCashForecast": "Low cash forecast — reduce discretionary spend",
-    "noMajorIssues": "No major issues this month — keep it up!"
+    "noMajorIssues": "No major issues this month — keep it up!",
+    "csvDate": "Date",
+    "csvType": "Type",
+    "csvCategory": "Category",
+    "csvAmount": "Amount ({currency})",
+    "csvAccount": "Account",
+    "csvToAccount": "To account",
+    "csvMerchant": "Merchant",
+    "csvNote": "Note",
+    "csvTypeIncome": "Income",
+    "csvTypeExpense": "Expense",
+    "csvTypeTransfer": "Transfer"
   },
   "NewTransaction": {
     "title": "Add transaction",

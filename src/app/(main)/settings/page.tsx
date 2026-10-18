@@ -18,6 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getDb, resetLocalDatabase } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
+import { SharedChip, SharedToggle } from "@/components/shared-toggle";
 import {
   createClient,
   isSupabaseConfigured,
@@ -35,7 +37,7 @@ import {
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 import Link from "next/link";
-import type { Account } from "@/infrastructure/db/dexie/schema";
+import type { Account, UserProfile } from "@/infrastructure/db/dexie/schema";
 import { ACCOUNT_TYPES, SUPPORTED_CURRENCIES, SUPPORTED_UI_LOCALES } from "@/lib/constants";
 import { Moon, Sun, Plus, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -43,6 +45,33 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
+
+/** Full remote `user_profiles` row (snake_case) — every save sends all columns. */
+function toUserProfilePayload(p: UserProfile): Record<string, unknown> {
+  return {
+    id: p.id,
+    user_id: p.userId,
+    monthly_income_poisha: p.monthlyIncomePoisha,
+    currency_code: p.currencyCode,
+    locale: p.locale,
+    emergency_months: p.emergencyMonths,
+    onboarding_complete: p.onboardingComplete,
+    deleted_at: p.deletedAt ?? null,
+  };
+}
+
+/** Full remote `accounts` row (snake_case) incl. user_id + group_id. */
+function toAccountPayload(a: Account): Record<string, unknown> {
+  return {
+    id: a.id,
+    user_id: a.userId,
+    group_id: a.groupId ?? null,
+    type_smallint: a.type,
+    name: a.name,
+    balance_poisha: a.balancePoisha,
+    deleted_at: a.deletedAt ?? null,
+  };
+}
 
 export default function SettingsPage() {
   const t = useTranslations("Settings");
@@ -68,6 +97,9 @@ export default function SettingsPage() {
   const [uiLocale, setUiLocale] = useState(locale.split("-")[0]);
   const [currency, setCurrency] = useState(currencyCode);
   const [syncing, setSyncing] = useState(false);
+  const [fixingDuplicates, setFixingDuplicates] = useState(false);
+  const [forceResyncing, setForceResyncing] = useState(false);
+  const syncBusy = syncing || fixingDuplicates || forceResyncing;
   const [syncMsg, setSyncMsg] = useState("");
   const [email, setEmail] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[] | null>(null);
@@ -78,6 +110,7 @@ export default function SettingsPage() {
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState<number>(ACCOUNT_TYPES.WALLET);
   const [newAccountBalance, setNewAccountBalance] = useState("");
+  const [newAccountShared, setNewAccountShared] = useState(true);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
   const [exportingData, setExportingData] = useState(false);
@@ -104,10 +137,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!userId) return;
-    getDb()
-      .accounts.where("userId")
-      .equals(userId)
-      .filter((a) => !a.deletedAt)
+    scoped(getDb().accounts, userId, groupId)
       .toArray()
       .then((accs) => {
         setAccounts(accs);
@@ -115,7 +145,7 @@ export default function SettingsPage() {
           Object.fromEntries(accs.map((a) => [a.id, String(toMajor(a.balancePoisha))])),
         );
       });
-  }, [userId, toMajor]);
+  }, [userId, groupId, toMajor]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -137,12 +167,7 @@ export default function SettingsPage() {
     const balancePoisha = toMinor(amount);
     const now = new Date().toISOString();
     await getDb().accounts.update(acc.id, { balancePoisha, updatedAt: now });
-    await enqueueSync("accounts", acc.id, "upsert", {
-      id: acc.id,
-      type_smallint: acc.type,
-      name: acc.name,
-      balance_poisha: balancePoisha,
-    });
+    await enqueueSync("accounts", acc.id, "upsert", toAccountPayload({ ...acc, balancePoisha, updatedAt: now }));
     setAccounts((prev) => prev?.map((a) => (a.id === acc.id ? { ...a, balancePoisha } : a)) ?? prev);
     setSavingAccountId(null);
     toast(t("balanceUpdated", { name: acc.name }), "success");
@@ -160,6 +185,7 @@ export default function SettingsPage() {
     const acc: Account = {
       id: uuid(),
       userId,
+      groupId: newAccountShared && groupId ? groupId : null,
       type: newAccountType,
       name: newAccountName.trim(),
       balancePoisha: toMinor(amount),
@@ -167,12 +193,7 @@ export default function SettingsPage() {
       updatedAt: now,
     };
     await getDb().accounts.put(acc as never);
-    await enqueueSync("accounts", acc.id, "upsert", {
-      id: acc.id,
-      type_smallint: acc.type,
-      name: acc.name,
-      balance_poisha: acc.balancePoisha,
-    });
+    await enqueueSync("accounts", acc.id, "upsert", toAccountPayload(acc));
     setAccounts((prev) => [...(prev ?? []), acc]);
     setBalanceInputs((prev) => ({ ...prev, [acc.id]: String(toMajor(acc.balancePoisha)) }));
     setNewAccountName("");
@@ -216,10 +237,17 @@ export default function SettingsPage() {
       return;
     }
     const now = new Date().toISOString();
+    const monthlyIncomePoisha = toMinor(amount);
     await getDb().userProfiles.update(profile.id, {
-      monthlyIncomePoisha: toMinor(amount),
+      monthlyIncomePoisha,
       updatedAt: now,
     });
+    await enqueueSync(
+      "user_profiles",
+      profile.id,
+      "upsert",
+      toUserProfilePayload({ ...profile, monthlyIncomePoisha, updatedAt: now })
+    );
     setSavingIncome(false);
     toast(t("incomeSaved"), "success");
   }
@@ -241,11 +269,12 @@ export default function SettingsPage() {
       locale: uiLocale,
       updatedAt: now,
     });
-    await enqueueSync("user_profiles", profile.id, "upsert", {
-      id: profile.id,
-      currency_code: currency,
-      locale: uiLocale,
-    });
+    await enqueueSync(
+      "user_profiles",
+      profile.id,
+      "upsert",
+      toUserProfilePayload({ ...profile, currencyCode: currency, locale: uiLocale, updatedAt: now })
+    );
     document.cookie = `NEXT_LOCALE=${uiLocale}; path=/; max-age=31536000`;
     setSavingCurrency(false);
     toast(t("currencySaved"), "success");
@@ -255,15 +284,18 @@ export default function SettingsPage() {
   async function handleSync() {
     if (!userId) return;
     setSyncing(true);
-    await repairAccountSync(userId);
-    const { pushed, errors, lastError } = await processSyncQueue(userId, groupId);
-    const msg =
-      errors > 0
-        ? t("syncResultWithErrors", { pushed, errors, lastError: lastError ?? "" })
-        : t("syncResultOk", { pushed });
-    setSyncMsg(msg);
-    setSyncing(false);
-    toast(msg, errors ? "error" : "success");
+    try {
+      await repairAccountSync(userId);
+      const { pushed, errors, lastError } = await processSyncQueue(userId, groupId);
+      const msg =
+        errors > 0
+          ? t("syncResultWithErrors", { pushed, errors, lastError: lastError ?? "" })
+          : t("syncResultOk", { pushed });
+      setSyncMsg(msg);
+      toast(msg, errors ? "error" : "success");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function handleFixDuplicates() {
@@ -275,11 +307,15 @@ export default function SettingsPage() {
       variant: "destructive",
     });
     if (!ok) return;
-    setSyncing(true);
-    const [{ merged: mergedAccounts, groups: accountGroups }, { merged: mergedGoals, groups: goalGroups }] =
-      await Promise.all([mergeDuplicateAccounts(userId), mergeDuplicateGoals(userId)]);
-    await repairLocalBudgets(userId);
-    setSyncing(false);
+    setFixingDuplicates(true);
+    let mergedAccounts = 0, accountGroups = 0, mergedGoals = 0, goalGroups = 0;
+    try {
+      [{ merged: mergedAccounts, groups: accountGroups }, { merged: mergedGoals, groups: goalGroups }] =
+        await Promise.all([mergeDuplicateAccounts(userId), mergeDuplicateGoals(userId)]);
+      await repairLocalBudgets(userId);
+    } finally {
+      setFixingDuplicates(false);
+    }
     const parts: string[] = [];
     if (accountGroups > 0) parts.push(t("mergedAccountsCount", { count: mergedAccounts }));
     if (goalGroups > 0) parts.push(t("mergedGoalsCount", { count: mergedGoals }));
@@ -293,9 +329,14 @@ export default function SettingsPage() {
 
   async function handleForceResync() {
     if (!userId) return;
-    setSyncing(true);
-    const { pushed, errors, pulled, pullError } = await forceFullResync(userId, groupId);
-    setSyncing(false);
+    setForceResyncing(true);
+    let result: Awaited<ReturnType<typeof forceFullResync>>;
+    try {
+      result = await forceFullResync(userId, groupId);
+    } finally {
+      setForceResyncing(false);
+    }
+    const { pushed, errors, pulled, pullError } = result;
     if (pullError) {
       toast(t("resyncPullFailed", { pushed, message: pullError }), "error");
       return;
@@ -334,7 +375,9 @@ export default function SettingsPage() {
       setResettingPassword(false);
       return;
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
     setResettingPassword(false);
     toast(
       error ? t("resetEmailFailed", { message: error.message }) : t("resetEmailSent"),
@@ -428,7 +471,10 @@ export default function SettingsPage() {
               accounts.map((acc) => (
                 <div key={acc.id} className="flex items-end gap-2">
                   <div className="flex-1 space-y-1">
-                    <Label htmlFor={`bal-${acc.id}`}>{acc.name}</Label>
+                    <Label htmlFor={`bal-${acc.id}`} className="flex items-center gap-2">
+                      {acc.name}
+                      <SharedChip groupId={acc.groupId} />
+                    </Label>
                     <AmountInput
                       id={`bal-${acc.id}`}
                       value={balanceInputs[acc.id] ?? ""}
@@ -494,6 +540,7 @@ export default function SettingsPage() {
                   {t("add")}
                 </Button>
               </div>
+              <SharedToggle checked={newAccountShared} onChange={setNewAccountShared} />
             </div>
           </CardContent>
         </Card>
@@ -553,6 +600,7 @@ export default function SettingsPage() {
                 onClick={handleSync}
                 className="w-full"
                 loading={syncing}
+                disabled={syncBusy}
               >
                 {syncing ? t("syncing") : t("syncNow")}
               </Button>
@@ -570,7 +618,8 @@ export default function SettingsPage() {
                   onClick={handleFixDuplicates}
                   variant="outline"
                   className="w-full"
-                  loading={syncing}
+                  loading={fixingDuplicates}
+                  disabled={syncBusy}
                 >
                   {t("fixDuplicates")}
                 </Button>
@@ -595,7 +644,8 @@ export default function SettingsPage() {
                 onClick={handleForceResync}
                 variant="outline"
                 className="w-full"
-                loading={syncing}
+                loading={forceResyncing}
+                disabled={syncBusy}
               >
                 {t("forceResync")}
               </Button>

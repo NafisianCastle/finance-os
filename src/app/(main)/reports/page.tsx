@@ -9,9 +9,12 @@ import { getDashboardMetrics } from "@/application/analytics";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { getBudgetsForMonth, scoped } from "@/infrastructure/db/dexie/helpers";
 import type { Transaction } from "@/infrastructure/db/dexie/schema";
 import { ymKey } from "@/lib/utils";
-import { TX_TYPES, SYSTEM_CATEGORIES } from "@/lib/constants";
+import { toCsv } from "@/lib/csv";
+import { TX_TYPES } from "@/lib/constants";
+import { useCategoryName } from "@/hooks/use-category-name";
 import {
   Select,
   SelectContent,
@@ -30,7 +33,7 @@ import {
   format,
 } from "date-fns";
 import { Download, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 
 const CategoryBreakdownChart = dynamic(
@@ -48,17 +51,14 @@ interface SpendingPattern {
   microSpendCategories: { category: string; txCount: number; totalPoisha: number }[];
 }
 
-function getCategoryName(id: string): string {
-  return SYSTEM_CATEGORIES.find((c) => c.id === id)?.name ?? id;
-}
-
-function analyzeSpendingPatterns(allTxs: Transaction[]): SpendingPattern {
+/** Patterns over the 3 months ending at `refMonth` (the month being viewed). */
+function analyzeSpendingPatterns(allTxs: Transaction[], refMonth: Date): SpendingPattern {
   const txs = allTxs.filter((t) => t.type === TX_TYPES.EXPENSE);
 
-  // Build per-category monthly spend for last 3 months
+  // Build per-category monthly spend for the 3 months ending at refMonth
   const months = [2, 1, 0].map((i) => ({
-    start: startOfMonth(subMonths(new Date(), i)),
-    end: endOfMonth(subMonths(new Date(), i)),
+    start: startOfMonth(subMonths(refMonth, i)),
+    end: endOfMonth(subMonths(refMonth, i)),
   }));
 
   const spendByMonthCat: Record<string, number[]> = {};
@@ -118,7 +118,8 @@ function analyzeSpendingPatterns(allTxs: Transaction[]): SpendingPattern {
 }
 
 function downloadCSV(data: string, filename: string) {
-  const blob = new Blob([data], { type: "text/csv;charset=utf-8;" });
+  // BOM so spreadsheet apps detect UTF-8 (Bengali category/type labels).
+  const blob = new Blob(["\uFEFF", data], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -129,8 +130,12 @@ function downloadCSV(data: string, filename: string) {
 
 export default function ReportsPage() {
   const t = useTranslations("Reports");
+  const tDash = useTranslations("Dashboard");
+  const locale = useLocale();
+  const categoryName = useCategoryName();
   const { format: formatMoney, toMajor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()));
   const isCurrentMonth = ymKey(selectedMonth) === ymKey(new Date());
   const [summary, setSummary] = useState<{
@@ -155,10 +160,8 @@ export default function ReportsPage() {
     (async () => {
       const db = getDb();
       const ym = ymKey(selectedMonth);
-      const budgets = await db.budgets
-        .filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt)
-        .toArray();
-      const txs = await db.transactions.where("userId").equals(userId).filter((t) => !t.deletedAt).toArray();
+      const budgets = await getBudgetsForMonth(userId, ym, groupId);
+      const txs = await scoped(db.transactions, userId, groupId).toArray();
       const start = startOfMonth(selectedMonth);
       const end = endOfMonth(selectedMonth);
       const byCategory: Record<string, number> = {};
@@ -187,22 +190,29 @@ export default function ReportsPage() {
       for (const b of budgets) {
         const s = byCategory[b.categoryId] ?? 0;
         const tot = b.allocatedPoisha + b.carryPoisha;
-        if (tot > 0 && s > tot) mistakes.push(t("overspentOn", { category: getCategoryName(b.categoryId) }));
+        if (tot > 0 && s > tot) mistakes.push(t("overspentOn", { category: categoryName(b.categoryId) }));
       }
       if (isCurrentMonth) {
-        const metrics = await getDashboardMetrics(userId);
-        if (metrics.maturity.score >= 65) wins.push(t("maturityLevel", { level: metrics.maturity.level }));
+        const metrics = await getDashboardMetrics(userId, txs, groupId);
+        if (metrics.maturity.score >= 65) {
+          wins.push(
+            t("maturityLevel", {
+              level: tDash(`maturityLevel_${metrics.maturity.level}` as "maturityLevel_Poor"),
+            })
+          );
+        }
         if (metrics.cashflow.lowCashWarning) mistakes.push(t("lowCashForecast"));
       }
       if (mistakes.length === 0) mistakes.push(t("noMajorIssues"));
       setSummary({ income, expense, savingsRatePct, byCategory, wins, mistakes });
 
-      setPatterns(analyzeSpendingPatterns(txs));
+      setPatterns(analyzeSpendingPatterns(txs, selectedMonth));
 
+      const monthFormatter = new Intl.DateTimeFormat(locale, { month: "short" });
       const trendData: { month: string; income: number; expense: number }[] = [];
       for (let i = 5; i >= 0; i--) {
-        const mStart = startOfMonth(subMonths(new Date(), i));
-        const mEnd = endOfMonth(subMonths(new Date(), i));
+        const mStart = startOfMonth(subMonths(selectedMonth, i));
+        const mEnd = endOfMonth(subMonths(selectedMonth, i));
         let inc = 0;
         let exp = 0;
         for (const tx of txs) {
@@ -211,11 +221,11 @@ export default function ReportsPage() {
           if (tx.type === TX_TYPES.INCOME) inc += tx.amountPoisha;
           if (tx.type === TX_TYPES.EXPENSE) exp += tx.amountPoisha;
         }
-        trendData.push({ month: mStart.toLocaleString("en", { month: "short" }), income: inc, expense: exp });
+        trendData.push({ month: monthFormatter.format(mStart), income: inc, expense: exp });
       }
       setTrend(trendData);
     })();
-  }, [userId, selectedMonth, isCurrentMonth]);
+  }, [userId, groupId, selectedMonth, isCurrentMonth, locale, t, tDash, categoryName]);
 
   const categoryBreakdown = useMemo(
     () =>
@@ -223,9 +233,9 @@ export default function ReportsPage() {
         ? Object.entries(summary.byCategory)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 6)
-            .map(([id, value]) => ({ name: getCategoryName(id), value }))
+            .map(([id, value]) => ({ name: categoryName(id), value }))
         : [],
-    [summary]
+    [summary, categoryName]
   );
 
   async function handleExportCSV() {
@@ -233,11 +243,13 @@ export default function ReportsPage() {
     setIsExporting(true);
     try {
       const db = getDb();
-      let txs = await db.transactions
-        .where("userId")
-        .equals(userId)
-        .filter((t) => !t.deletedAt)
-        .toArray();
+      let txs = await scoped(db.transactions, userId, groupId).toArray();
+      const [accounts, categories] = await Promise.all([
+        scoped(db.accounts, userId, groupId).toArray(),
+        db.categories.where("userId").equals(userId).toArray(),
+      ]);
+      const accountName = new Map(accounts.map((a) => [a.id, a.name]));
+      const categoryById = new Map(categories.map((c) => [c.id, c]));
 
       let suffix = "all";
       if (exportScope === "month") {
@@ -263,30 +275,45 @@ export default function ReportsPage() {
         suffix = format(new Date(), "yyyy-MM-dd");
       }
 
-      const header = `Date,Type,Category,Amount (${currencyCode}),Account,Merchant,Note`;
+      const header = [
+        t("csvDate"),
+        t("csvType"),
+        t("csvCategory"),
+        t("csvAmount", { currency: currencyCode }),
+        t("csvAccount"),
+        t("csvToAccount"),
+        t("csvMerchant"),
+        t("csvNote"),
+      ];
       const rows = txs
         .sort((a, b) => b.date.localeCompare(a.date))
-        .map((t) => {
-          const type = t.type === TX_TYPES.INCOME ? "Income" : t.type === TX_TYPES.EXPENSE ? "Expense" : "Transfer";
-          const amount = (toMajor(t.amountPoisha)).toFixed(2);
+        .map((tx) => {
+          const isTransfer = tx.type === TX_TYPES.TRANSFER;
+          const type =
+            tx.type === TX_TYPES.INCOME
+              ? t("csvTypeIncome")
+              : tx.type === TX_TYPES.EXPENSE
+                ? t("csvTypeExpense")
+                : t("csvTypeTransfer");
           return [
-            t.date,
+            tx.date,
             type,
-            t.categoryId,
-            amount,
-            t.accountId,
-            t.merchant ?? "",
-            (t.note ?? "").replace(/,/g, ";"),
-          ].join(",");
+            isTransfer ? "" : categoryName(categoryById.get(tx.categoryId) ?? tx.categoryId),
+            toMajor(tx.amountPoisha).toFixed(2),
+            accountName.get(tx.accountId) ?? tx.accountId,
+            isTransfer && tx.toAccountId ? accountName.get(tx.toAccountId) ?? tx.toAccountId : "",
+            tx.merchant ?? "",
+            tx.note ?? "",
+          ];
         });
-      const csv = [header, ...rows].join("\n");
+      const csv = toCsv([header, ...rows]);
       downloadCSV(csv, `finance-os-transactions-${suffix}.csv`);
     } finally {
       setIsExporting(false);
     }
   }
 
-  const monthLabel = format(selectedMonth, "MMMM yyyy");
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(selectedMonth);
 
   return (
     <AppShell title={t("title")}>
@@ -446,7 +473,7 @@ export default function ReportsPage() {
                           ) : (
                             <Minus className="h-3 w-3 text-muted-foreground" />
                           )}
-                          {getCategoryName(l.category)}
+                          {categoryName(l.category)}
                         </span>
                         <span className="text-muted-foreground">
                           {t("perMonth", { amount: formatMoney(l.avgSpend) })}
@@ -464,7 +491,7 @@ export default function ReportsPage() {
                   <ul className="space-y-1.5">
                     {patterns.microSpendCategories.map((m) => (
                       <li key={m.category} className="flex items-center justify-between text-xs">
-                        <span>{getCategoryName(m.category)}</span>
+                        <span>{categoryName(m.category)}</span>
                         <span className="text-muted-foreground">
                           {t("txnsCount", { count: m.txCount, amount: formatMoney(m.totalPoisha) })}
                         </span>
