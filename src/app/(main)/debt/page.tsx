@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
-import { v4 as uuid } from "uuid";
+import { useLocale, useTranslations } from "next-intl";
+import { parseISO } from "date-fns";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +10,18 @@ import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SharedChip, SharedToggle } from "@/components/shared-toggle";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import type { Debt, Account } from "@/infrastructure/db/dexie/schema";
 import { DEBT_STATUS } from "@/lib/constants";
-import { enqueueSync } from "@/infrastructure/sync/sync-queue";
-import { repayDebt } from "@/application/debts";
+import { addDebt, deleteDebt, listDebts, repayDebt, updateDebt } from "@/application/debts";
 import { useToast } from "@/components/ui/toast";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, HandCoins } from "lucide-react";
 
 function debtPressureLevel(
   debtToIncomePct: number,
@@ -35,9 +38,12 @@ function debtPressureLevel(
 
 export default function DebtPage() {
   const t = useTranslations("Debt");
-  const { format, toMinor, currencyCode } = useCurrencyFormatter();
+  const locale = useLocale();
+  const { format, toMinor, toMajor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [debts, setDebts] = useState<Debt[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [monthlyIncome, setMonthlyIncome] = useState(0);
@@ -45,84 +51,136 @@ export default function DebtPage() {
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [interestRate, setInterestRate] = useState("");
+  const [shared, setShared] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [repayingId, setRepayingId] = useState<string | null>(null);
   const [repayAmount, setRepayAmount] = useState("");
   const [repayAccountId, setRepayAccountId] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [isRepaying, setIsRepaying] = useState(false);
 
+  const formatDate = (d: string) =>
+    new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(parseISO(d));
+
   async function load() {
     if (!userId) return;
     const db = getDb();
-    const all = await db.debts.where("userId").equals(userId).filter((d) => !d.deletedAt).toArray();
-    setDebts(all);
+    setDebts(await listDebts(userId, groupId));
     const profile = await db.userProfiles.where("userId").equals(userId).first();
     setMonthlyIncome(profile?.monthlyIncomePoisha ?? 0);
-    const accs = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
+    const accs = await scoped(db.accounts, userId, groupId).toArray();
     setAccounts(accs);
-    setRepayAccountId((prev) => prev || accs[0]?.id || "");
+    setRepayAccountId((prev) => (accs.some((a) => a.id === prev) ? prev : accs[0]?.id || ""));
   }
 
   useEffect(() => {
     const timer = setTimeout(load, 0);
     return () => clearTimeout(timer);
-  }, [userId]);
+  }, [userId, groupId]);
 
   function startRepay(debt: Debt) {
     setRepayingId(debt.id);
-    setRepayAmount((debt.remainingPoisha / 100).toString());
+    setRepayAmount(toMajor(debt.remainingPoisha).toString());
   }
 
   async function submitRepay(debt: Debt) {
-    if (!userId || !repayAccountId) return;
+    if (!userId) return;
+    if (!repayAccountId) {
+      toast(t("selectAccountError"), "error");
+      return;
+    }
     const poisha = toMinor(parseFloat(repayAmount) || 0);
-    if (poisha <= 0) return;
+    if (poisha <= 0) {
+      toast(t("enterAmountError"), "error");
+      return;
+    }
     setIsRepaying(true);
     try {
-      await repayDebt(userId, debt, poisha, repayAccountId);
+      await repayDebt(userId, debt, poisha, repayAccountId, groupId);
       setRepayingId(null);
       setRepayAmount("");
       toast(t("repaymentRecorded"), "success");
-      load();
+      await load();
+    } catch {
+      toast(t("actionFailed"), "error");
     } finally {
       setIsRepaying(false);
     }
   }
 
-  async function addDebt() {
+  function resetForm() {
+    setEditingId(null);
+    setLender("");
+    setAmount("");
+    setDueDate("");
+    setInterestRate("");
+  }
+
+  function startEdit(d: Debt) {
+    setEditingId(d.id);
+    setLender(d.lender);
+    setAmount(String(toMajor(d.principalPoisha)));
+    setInterestRate(d.interestRate != null ? String(d.interestRate) : "");
+    setDueDate(d.dueDate ?? "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveDebt() {
     if (!userId) return;
+    if (!lender.trim()) {
+      toast(t("enterLenderError"), "error");
+      return;
+    }
+    const poisha = toMinor(parseFloat(amount) || 0);
+    if (poisha <= 0) {
+      toast(t("enterAmountError"), "error");
+      return;
+    }
     setIsAdding(true);
     try {
-      const poisha = toMinor(parseFloat(amount) || 0);
-      const now = new Date().toISOString();
-      const d: Debt = {
-        id: uuid(),
-        userId,
-        lender,
+      const data = {
+        lender: lender.trim(),
         principalPoisha: poisha,
-        remainingPoisha: poisha,
         interestRate: interestRate ? parseFloat(interestRate) : undefined,
-        borrowDate: now.slice(0, 10),
         dueDate: dueDate || undefined,
-        status: DEBT_STATUS.ACTIVE,
-        createdAt: now,
-        updatedAt: now,
       };
-      await getDb().debts.put(d as never);
-      await enqueueSync("debts", d.id, "upsert", {
-        id: d.id,
-        lender: d.lender,
-        principal_poisha: poisha,
-        remaining_poisha: poisha,
-        interest_rate: d.interestRate ?? null,
-        borrow_date: d.borrowDate,
-        due_date: d.dueDate ?? null,
-        status_smallint: 1,
-      });
-      setLender(""); setAmount(""); setDueDate(""); setInterestRate("");
-      load();
+      if (editingId) {
+        await updateDebt(userId, editingId, data, groupId);
+        toast(t("debtUpdated"), "success");
+      } else {
+        await addDebt(userId, data, shared ? groupId : null);
+        toast(t("debtAdded"), "success");
+      }
+      resetForm();
+      await load();
+    } catch {
+      toast(t("actionFailed"), "error");
     } finally {
       setIsAdding(false);
+    }
+  }
+
+  async function removeDebt(d: Debt) {
+    if (!userId) return;
+    const ok = await confirm({
+      title: t("deleteDebtTitle", { name: d.lender }),
+      description: t("deleteDebtDescription"),
+      confirmLabel: t("delete"),
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setDeletingId(d.id);
+    try {
+      await deleteDebt(userId, d.id, groupId);
+      if (editingId === d.id) resetForm();
+      if (repayingId === d.id) setRepayingId(null);
+      await load();
+      toast(t("debtDeleted", { name: d.lender }), "success");
+    } catch {
+      toast(t("actionFailed"), "error");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -184,24 +242,25 @@ export default function DebtPage() {
           </Card>
         )}
 
-        {/* Add debt form */}
+        {/* Add / edit debt form */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t("addDebt")}</CardTitle>
+            <CardTitle className="text-base">{editingId ? t("editDebt") : t("addDebt")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
-              <Label>{t("lender")}</Label>
-              <Input value={lender} onChange={(e) => setLender(e.target.value)} />
+              <Label htmlFor="debt-lender">{t("lender")}</Label>
+              <Input id="debt-lender" value={lender} onChange={(e) => setLender(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
-                <Label>{t("amountLabel", { currency: currencyCode })}</Label>
-                <AmountInput value={amount} onChange={setAmount} />
+                <Label htmlFor="debt-amount">{t("amountLabel", { currency: currencyCode })}</Label>
+                <AmountInput id="debt-amount" value={amount} onChange={setAmount} />
               </div>
               <div className="space-y-2">
-                <Label>{t("interestRate")}</Label>
+                <Label htmlFor="debt-rate">{t("interestRate")}</Label>
                 <AmountInput
+                  id="debt-rate"
                   max={100}
                   value={interestRate}
                   onChange={setInterestRate}
@@ -210,14 +269,27 @@ export default function DebtPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>{t("dueDateOptional")}</Label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <Label htmlFor="debt-due">{t("dueDateOptional")}</Label>
+              <Input id="debt-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
-            <Button onClick={addDebt} className="w-full" loading={isAdding}>{t("addDebt")}</Button>
+            {!editingId && <SharedToggle checked={shared} onChange={setShared} />}
+            <div className="flex gap-2">
+              <Button onClick={saveDebt} className="flex-1" loading={isAdding}>
+                {editingId ? t("save") : t("addDebt")}
+              </Button>
+              {editingId && (
+                <Button variant="ghost" onClick={resetForm}>
+                  {t("cancel")}
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 
         {/* Debt list */}
+        {debts.length === 0 && (
+          <EmptyState icon={HandCoins} title={t("emptyTitle")} description={t("emptyDescription")} />
+        )}
         {debts.map((d) => {
           const isOverdue = d.dueDate && d.dueDate < today && d.status === DEBT_STATUS.ACTIVE;
           return (
@@ -225,7 +297,10 @@ export default function DebtPage() {
               <CardContent className="py-4 space-y-3">
                 <div className="flex justify-between items-start gap-3">
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{d.lender}</p>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="truncate font-medium">{d.lender}</p>
+                      <SharedChip groupId={d.groupId} />
+                    </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {isOverdue ? (
                         <Badge variant="destructive" className="text-xs">{t("overdue")}</Badge>
@@ -235,7 +310,7 @@ export default function DebtPage() {
                         <Badge variant="outline" className="text-xs">{t("active")}</Badge>
                       )}
                       {d.dueDate && (
-                        <p className="text-xs text-muted-foreground">{t("dueOn", { date: d.dueDate })}</p>
+                        <p className="text-xs text-muted-foreground">{t("dueOn", { date: formatDate(d.dueDate) })}</p>
                       )}
                       {d.interestRate != null && (
                         <p className="text-xs text-muted-foreground">{t("interestRatePerAnnum", { rate: d.interestRate })}</p>
@@ -244,37 +319,51 @@ export default function DebtPage() {
                   </div>
                   <p className="shrink-0 font-semibold text-destructive">{format(d.remainingPoisha)}</p>
                 </div>
-                {d.status !== DEBT_STATUS.PAID && (
-                  repayingId === d.id ? (
-                    <div className="space-y-2 border-t pt-3">
-                      <div className="space-y-2">
-                        <Label>{t("amountPaidLabel", { currency: currencyCode })}</Label>
-                        <AmountInput value={repayAmount} onChange={setRepayAmount} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t("payFrom")}</Label>
-                        <select
-                          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
-                          value={repayAccountId}
-                          onChange={(e) => setRepayAccountId(e.target.value)}
-                        >
-                          {accounts.map((a) => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button onClick={() => submitRepay(d)} className="flex-1" loading={isRepaying}>{t("confirm")}</Button>
-                        <Button variant="outline" onClick={() => setRepayingId(null)} className="flex-1">
-                          {t("cancel")}
-                        </Button>
-                      </div>
+                {d.status !== DEBT_STATUS.PAID && repayingId === d.id ? (
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="space-y-2">
+                      <Label htmlFor={`repay-amt-${d.id}`}>{t("amountPaidLabel", { currency: currencyCode })}</Label>
+                      <AmountInput id={`repay-amt-${d.id}`} value={repayAmount} onChange={setRepayAmount} />
                     </div>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={() => startRepay(d)}>
-                      {t("recordRepayment")}
+                    <div className="space-y-2">
+                      <Label htmlFor={`repay-acc-${d.id}`}>{t("payFrom")}</Label>
+                      <select
+                        id={`repay-acc-${d.id}`}
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                        value={repayAccountId}
+                        onChange={(e) => setRepayAccountId(e.target.value)}
+                      >
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={() => submitRepay(d)} className="flex-1" loading={isRepaying}>{t("confirm")}</Button>
+                      <Button variant="outline" onClick={() => setRepayingId(null)} className="flex-1">
+                        {t("cancel")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {d.status !== DEBT_STATUS.PAID && (
+                      <Button variant="outline" size="sm" onClick={() => startRepay(d)}>
+                        {t("recordRepayment")}
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => startEdit(d)}>
+                      {t("edit")}
                     </Button>
-                  )
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => removeDebt(d)}
+                      loading={deletingId === d.id}
+                    >
+                      {t("delete")}
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>

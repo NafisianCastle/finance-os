@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { v4 as uuid } from "uuid";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { differenceInCalendarMonths, parseISO } from "date-fns";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,47 +13,74 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SharedChip, SharedToggle } from "@/components/shared-toggle";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import type { Account, Goal } from "@/infrastructure/db/dexie/schema";
-import { enqueueSync } from "@/infrastructure/sync/sync-queue";
-import { addTransaction } from "@/application/transactions";
-import { TX_TYPES } from "@/lib/constants";
+import {
+  addGoal,
+  contributeToGoal,
+  deleteGoal,
+  listGoals,
+  updateGoal,
+} from "@/application/goals";
 import { Target } from "lucide-react";
-
-const GOAL_CATEGORY_ID = "savings";
 
 export default function GoalsPage() {
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const { toast } = useToast();
+  const confirm = useConfirm();
   const t = useTranslations("Goals");
-  const { format, toMinor, currencyCode } = useCurrencyFormatter();
+  const locale = useLocale();
+  const { format, toMinor, toMajor, currencyCode } = useCurrencyFormatter();
   const [goals, setGoals] = useState<Goal[] | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [deadline, setDeadline] = useState("");
+  const [shared, setShared] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [contributingId, setContributingId] = useState<string | null>(null);
   const [contributeAmount, setContributeAmount] = useState("");
   const [contributeAccountId, setContributeAccountId] = useState("");
   const [contributing, setContributing] = useState(false);
 
+  const formatDate = (d: string) =>
+    new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(parseISO(d));
+
   async function load() {
     if (!userId) return;
-    const db = getDb();
-    const list = await db.goals.where("userId").equals(userId).filter((g) => !g.deletedAt).toArray();
-    setGoals(list);
-    const accs = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
-    setAccounts(accs);
+    setGoals(await listGoals(userId, groupId));
+    setAccounts(await scoped(getDb().accounts, userId, groupId).toArray());
   }
 
   useEffect(() => {
     const timer = setTimeout(load, 0);
     return () => clearTimeout(timer);
-  }, [userId]);
+  }, [userId, groupId]);
 
-  async function addGoal() {
+  function resetForm() {
+    setEditingId(null);
+    setName("");
+    setTarget("");
+    setDeadline("");
+  }
+
+  function startEdit(g: Goal) {
+    setEditingId(g.id);
+    setName(g.name);
+    setTarget(String(toMajor(g.targetPoisha)));
+    setDeadline(g.deadline ?? "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveGoal() {
     if (!userId) return;
     if (!name.trim()) {
       toast(t("enterNameError"), "error");
@@ -64,29 +91,45 @@ export default function GoalsPage() {
       toast(t("enterTargetError"), "error");
       return;
     }
-    setAdding(true);
-    const now = new Date().toISOString();
-    const g: Goal = {
-      id: uuid(),
-      userId,
-      name: name.trim(),
-      targetPoisha: toMinor(targetBdt),
-      savedPoisha: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await getDb().goals.put(g as never);
-    await enqueueSync("goals", g.id, "upsert", {
-      id: g.id,
-      name: g.name,
-      target_poisha: g.targetPoisha,
-      saved_poisha: 0,
+    setSaving(true);
+    try {
+      const data = { name: name.trim(), targetPoisha: toMinor(targetBdt), deadline };
+      if (editingId) {
+        await updateGoal(userId, editingId, data, groupId);
+        toast(t("goalUpdated"), "success");
+      } else {
+        await addGoal(userId, data, shared ? groupId : null);
+        toast(t("goalAdded", { name: data.name }), "success");
+      }
+      resetForm();
+      await load();
+    } catch {
+      toast(t("actionFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeGoal(g: Goal) {
+    if (!userId) return;
+    const ok = await confirm({
+      title: t("deleteGoalTitle", { name: g.name }),
+      description: t("deleteGoalDescription"),
+      confirmLabel: t("delete"),
+      variant: "destructive",
     });
-    setName("");
-    setTarget("");
-    setAdding(false);
-    await load();
-    toast(t("goalAdded", { name: g.name }), "success");
+    if (!ok) return;
+    setDeletingId(g.id);
+    try {
+      await deleteGoal(userId, g.id, groupId);
+      if (editingId === g.id) resetForm();
+      await load();
+      toast(t("goalDeleted", { name: g.name }), "success");
+    } catch {
+      toast(t("actionFailed"), "error");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   function startContribute(g: Goal) {
@@ -113,53 +156,57 @@ export default function GoalsPage() {
       return;
     }
     setContributing(true);
-    const amountPoisha = toMinor(amountBdt);
-    const now = new Date().toISOString();
-
-    // Moves real money out of the account into the goal, same as any other
-    // expense — keeps account balances and the Activity list truthful instead
-    // of letting savedPoisha be a number disconnected from actual funds.
-    await addTransaction(userId, {
-      type: TX_TYPES.EXPENSE,
-      amountPoisha,
-      accountId: contributeAccountId,
-      categoryId: GOAL_CATEGORY_ID,
-      date: now,
-      note: t("contributionNote", { name: g.name }),
-    });
-
-    const savedPoisha = g.savedPoisha + amountPoisha;
-    await getDb().goals.update(g.id, { savedPoisha, updatedAt: now });
-    await enqueueSync("goals", g.id, "upsert", {
-      id: g.id,
-      name: g.name,
-      target_poisha: g.targetPoisha,
-      saved_poisha: savedPoisha,
-    });
-    setContributing(false);
-    setContributingId(null);
-    setContributeAmount("");
-    setContributeAccountId("");
-    await load();
-    toast(t("progressAdded", { name: g.name }), "success");
+    try {
+      await contributeToGoal(
+        userId,
+        g.id,
+        toMinor(amountBdt),
+        contributeAccountId,
+        t("contributionNote", { name: g.name }),
+        groupId
+      );
+      cancelContribute();
+      await load();
+      toast(t("progressAdded", { name: g.name }), "success");
+    } catch {
+      toast(t("actionFailed"), "error");
+    } finally {
+      setContributing(false);
+    }
   }
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
 
   return (
     <AppShell title={t("title")}>
       <div className="space-y-4">
         <Card>
           <CardContent className="pt-4 space-y-3">
+            {editingId && <p className="text-sm font-medium">{t("editGoal")}</p>}
             <div className="space-y-2">
-              <Label>{t("nameLabel")}</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("namePlaceholder")} />
+              <Label htmlFor="goal-name">{t("nameLabel")}</Label>
+              <Input id="goal-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("namePlaceholder")} />
             </div>
             <div className="space-y-2">
-              <Label>{t("targetLabel", { currency: currencyCode })}</Label>
-              <AmountInput value={target} onChange={setTarget} />
+              <Label htmlFor="goal-target">{t("targetLabel", { currency: currencyCode })}</Label>
+              <AmountInput id="goal-target" value={target} onChange={setTarget} />
             </div>
-            <Button onClick={addGoal} className="w-full" loading={adding}>
-              {t("addGoal")}
-            </Button>
+            <div className="space-y-2">
+              <Label htmlFor="goal-deadline">{t("deadlineLabel")}</Label>
+              <Input id="goal-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            </div>
+            {!editingId && <SharedToggle checked={shared} onChange={setShared} />}
+            <div className="flex gap-2">
+              <Button onClick={saveGoal} className="flex-1" loading={saving}>
+                {editingId ? t("save") : t("addGoal")}
+              </Button>
+              {editingId && (
+                <Button variant="ghost" onClick={resetForm}>
+                  {t("cancel")}
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
         {goals === null ? (
@@ -177,18 +224,37 @@ export default function GoalsPage() {
           goals.map((g) => {
             const pct = g.targetPoisha > 0 ? (g.savedPoisha / g.targetPoisha) * 100 : 0;
             const remaining = g.targetPoisha - g.savedPoisha;
-            const monthlyHint = remaining > 0 ? t("monthlyHint", { amount: format(Math.ceil(remaining / 12)) }) : t("complete");
+            let monthlyHint: string;
+            if (remaining <= 0) {
+              monthlyHint = t("complete");
+            } else if (g.deadline && g.deadline < todayStr) {
+              monthlyHint = t("pastDeadline");
+            } else if (g.deadline) {
+              const months = Math.max(1, differenceInCalendarMonths(parseISO(g.deadline), today));
+              monthlyHint = t("monthlyHintDeadline", {
+                amount: format(Math.ceil(remaining / months)),
+                date: formatDate(g.deadline),
+              });
+            } else {
+              monthlyHint = t("monthlyHint", { amount: format(Math.ceil(remaining / 12)) });
+            }
             return (
               <Card key={g.id} className="transition-colors hover:bg-accent/40">
                 <CardContent className="pt-4 space-y-2">
                   <div className="flex justify-between gap-3">
-                    <span className="min-w-0 truncate font-medium">{g.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate font-medium">{g.name}</span>
+                      <SharedChip groupId={g.groupId} />
+                    </span>
                     <span className="shrink-0 text-sm">{Math.round(pct)}%</span>
                   </div>
                   <Progress value={pct} />
                   <p className="text-xs text-muted-foreground">
                     {t("savedOfTarget", { saved: format(g.savedPoisha), target: format(g.targetPoisha) })}
                   </p>
+                  {g.deadline && (
+                    <p className="text-xs text-muted-foreground">{t("deadlineOn", { date: formatDate(g.deadline) })}</p>
+                  )}
                   <p className="text-xs text-primary">{monthlyHint}</p>
                   {contributingId === g.id ? (
                     <div className="space-y-2 pt-1">
@@ -220,14 +286,22 @@ export default function GoalsPage() {
                       </div>
                     </div>
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-1"
-                      onClick={() => startContribute(g)}
-                    >
-                      {t("addProgress")}
-                    </Button>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button size="sm" variant="outline" onClick={() => startContribute(g)}>
+                        {t("addProgress")}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => startEdit(g)}>
+                        {t("edit")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => removeGoal(g)}
+                        loading={deletingId === g.id}
+                      >
+                        {t("delete")}
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>
