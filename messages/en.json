@@ -540,7 +540,19 @@
     "markReceived": "Mark received",
     "cancel": "Cancel",
     "planAdded": "Plan added.",
-    "recorded": "Recorded."
+    "recorded": "Recorded.",
+    "editPlan": "Edit plan",
+    "save": "Save",
+    "edit": "Edit",
+    "cancelPlan": "Cancel plan",
+    "cancelPlanTitle": "Cancel this plan?",
+    "cancelPlanDescription": "The plan will be removed. Transactions already recorded from it are kept.",
+    "planCancelled": "Plan cancelled.",
+    "planUpdated": "Plan updated.",
+    "emptyTitle": "No planned payments",
+    "emptyDescription": "Add rent, bills or expected income above to get reminders when they're due.",
+    "amountMustBePositive": "Amount must be greater than zero.",
+    "selectAccount": "Select an account."
   },
   "ShoppingLists": {
     "title": "Shopping lists",
@@ -570,7 +582,20 @@
     "finishedToast": "Expense added.",
     "deleteList": "Delete this list",
     "deleteListTitle": "Delete shopping list?",
-    "deleteListDescription": "This removes the list and its items. This can't be undone."
+    "deleteListDescription": "This removes the list and its items. This can't be undone.",
+    "delete": "Delete",
+    "listDeleted": "List deleted.",
+    "deleteCompletedListDescription": "This removes the list and its items. Expenses already added from it are kept.",
+    "itemName": "Item name",
+    "editItemName": "Edit {name}",
+    "deleteItem": "Delete item",
+    "deleteItemTitle": "Delete {name}?",
+    "deleteCheckedItemDescription": "The expense recorded for this trip will be updated to leave this item out.",
+    "renameList": "Rename list",
+    "listRenamed": "List renamed.",
+    "notFoundTitle": "List not found",
+    "notFoundDescription": "This list was deleted or isn't shared with you.",
+    "backToLists": "Back to shopping lists"
   },
   "Notifications": {
     "title": "Notifications",

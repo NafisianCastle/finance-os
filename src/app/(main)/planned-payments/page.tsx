@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,77 +11,136 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/app-store";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import type { Account, PlannedPayment } from "@/infrastructure/db/dexie/schema";
 import { PLANNED_PAYMENT_DIRECTION, PLANNED_PAYMENT_STATUS, RECURRENCE_INTERVAL, SYSTEM_CATEGORIES } from "@/lib/constants";
-import { addPlannedPayment, deletePlannedPayment, markPlannedPaymentPaid } from "@/application/planned-payments";
+import {
+  addPlannedPayment,
+  deletePlannedPayment,
+  listPlannedPayments,
+  markPlannedPaymentPaid,
+  updatePlannedPayment,
+} from "@/application/planned-payments";
 import { useToast } from "@/components/ui/toast";
-import { Repeat } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SharedChip, SharedToggle } from "@/components/shared-toggle";
+import { useCategoryName } from "@/hooks/use-category-name";
+import { CalendarClock, Repeat } from "lucide-react";
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function PlannedPaymentsPage() {
   const t = useTranslations("PlannedPayments");
-  const { format, toMinor, currencyCode } = useCurrencyFormatter();
+  const locale = useLocale();
+  const { format, toMinor, toMajor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const { toast } = useToast();
+  const confirm = useConfirm();
+  const categoryName = useCategoryName();
 
   const [plans, setPlans] = useState<PlannedPayment[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [direction, setDirection] = useState<number>(PLANNED_PAYMENT_DIRECTION.PAY);
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("other");
   const [counterparty, setCounterparty] = useState("");
-  const [nextDueDate, setNextDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [nextDueDate, setNextDueDate] = useState(todayIso());
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceInterval, setRecurrenceInterval] = useState<number>(RECURRENCE_INTERVAL.MONTHLY);
   const [note, setNote] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
+  const [shared, setShared] = useState(true);
+  const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   async function load() {
     if (!userId) return;
-    const db = getDb();
-    const all = await db.plannedPayments
-      .where("userId")
-      .equals(userId)
-      .filter((p) => !p.deletedAt && p.status === PLANNED_PAYMENT_STATUS.ACTIVE)
-      .sortBy("nextDueDate");
+    const all = (await listPlannedPayments(userId, groupId))
+      .filter((p) => p.status === PLANNED_PAYMENT_STATUS.ACTIVE)
+      .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
     setPlans(all);
-    const accs = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
+    const accs = await scoped(getDb().accounts, userId, groupId).toArray();
     setAccounts(accs);
-    setAccountId((prev) => prev || accs[0]?.id || "");
+    setAccountId((prev) => (prev && accs.some((a) => a.id === prev) ? prev : accs[0]?.id || ""));
   }
 
   useEffect(() => {
     const timer = setTimeout(load, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, groupId]);
 
-  async function addPlan() {
-    if (!userId || !accountId) return;
-    setIsAdding(true);
+  function resetForm() {
+    setEditingId(null);
+    setDirection(PLANNED_PAYMENT_DIRECTION.PAY);
+    setAmount("");
+    setCategoryId("other");
+    setCounterparty("");
+    setNextDueDate(todayIso());
+    setIsRecurring(false);
+    setRecurrenceInterval(RECURRENCE_INTERVAL.MONTHLY);
+    setNote("");
+    setError("");
+  }
+
+  function startEdit(plan: PlannedPayment) {
+    setEditingId(plan.id);
+    setDirection(plan.direction);
+    setAmount(String(toMajor(plan.amountPoisha)));
+    setAccountId(plan.accountId);
+    setCategoryId(plan.direction === PLANNED_PAYMENT_DIRECTION.RECEIVE ? "other" : plan.categoryId);
+    setCounterparty(plan.counterparty ?? "");
+    setNextDueDate(plan.nextDueDate);
+    setIsRecurring(plan.isRecurring);
+    setRecurrenceInterval(plan.recurrenceInterval ?? RECURRENCE_INTERVAL.MONTHLY);
+    setNote(plan.note ?? "");
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function savePlan() {
+    if (!userId) return;
+    setError("");
+    const amountMajor = parseFloat(amount) || 0;
+    if (amountMajor <= 0) {
+      setError(t("amountMustBePositive"));
+      return;
+    }
+    if (!accountId) {
+      setError(t("selectAccount"));
+      return;
+    }
+    setIsSaving(true);
     try {
-      await addPlannedPayment(userId, {
+      const data = {
         direction,
-        amountPoisha: toMinor(parseFloat(amount) || 0),
+        amountPoisha: toMinor(amountMajor),
         accountId,
         categoryId: direction === PLANNED_PAYMENT_DIRECTION.RECEIVE ? "income" : categoryId,
-        counterparty: counterparty || undefined,
+        counterparty: counterparty.trim() || undefined,
         nextDueDate,
         isRecurring,
         recurrenceInterval: isRecurring ? recurrenceInterval : null,
-        note: note || undefined,
-      });
-      setAmount("");
-      setCounterparty("");
-      setNote("");
-      setIsRecurring(false);
-      toast(t("planAdded"), "success");
-      load();
+        note: note.trim() || undefined,
+      };
+      if (editingId) {
+        await updatePlannedPayment(userId, editingId, data, groupId);
+        toast(t("planUpdated"), "success");
+      } else {
+        await addPlannedPayment(userId, data, shared ? groupId : null);
+        toast(t("planAdded"), "success");
+      }
+      resetForm();
+      await load();
     } finally {
-      setIsAdding(false);
+      setIsSaving(false);
     }
   }
 
@@ -89,21 +148,41 @@ export default function PlannedPaymentsPage() {
     if (!userId) return;
     setPayingId(plan.id);
     try {
-      await markPlannedPaymentPaid(userId, plan);
+      await markPlannedPaymentPaid(userId, plan, groupId);
+      if (editingId === plan.id) resetForm();
       toast(t("recorded"), "success");
-      load();
+      await load();
     } finally {
       setPayingId(null);
     }
   }
 
-  async function remove(planId: string) {
+  async function remove(plan: PlannedPayment) {
     if (!userId) return;
-    await deletePlannedPayment(userId, planId);
-    load();
+    const ok = await confirm({
+      title: t("cancelPlanTitle"),
+      description: t("cancelPlanDescription"),
+      confirmLabel: t("cancelPlan"),
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setCancellingId(plan.id);
+    try {
+      await deletePlannedPayment(userId, plan.id, groupId);
+      if (editingId === plan.id) resetForm();
+      toast(t("planCancelled"), "success");
+      await load();
+    } finally {
+      setCancellingId(null);
+    }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
+  const dateFormatter = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
+  const formatDate = (d: string) => {
+    const date = new Date(`${d}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) ? d : dateFormatter.format(date);
+  };
   const intervalLabel = (i?: number | null) => {
     if (i === RECURRENCE_INTERVAL.WEEKLY) return t("weekly");
     if (i === RECURRENCE_INTERVAL.YEARLY) return t("yearly");
@@ -115,7 +194,7 @@ export default function PlannedPaymentsPage() {
       <div className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t("addPlan")}</CardTitle>
+            <CardTitle className="text-base">{editingId ? t("editPlan") : t("addPlan")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-2">
@@ -175,7 +254,7 @@ export default function PlannedPaymentsPage() {
                   onChange={(e) => setCategoryId(e.target.value)}
                 >
                   {SYSTEM_CATEGORIES.filter((c) => !["income", "savings", "investment"].includes(c.id)).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>{categoryName(c.id)}</option>
                   ))}
                 </select>
               </div>
@@ -206,9 +285,26 @@ export default function PlannedPaymentsPage() {
               <Input value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
 
-            <Button onClick={addPlan} className="w-full" loading={isAdding}>{t("addPlan")}</Button>
+            {!editingId && <SharedToggle checked={shared} onChange={setShared} />}
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <div className="flex gap-2">
+              <Button onClick={savePlan} className="flex-1" loading={isSaving}>
+                {editingId ? t("save") : t("addPlan")}
+              </Button>
+              {editingId && (
+                <Button variant="ghost" onClick={resetForm}>
+                  {t("cancel")}
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
+
+        {plans.length === 0 && (
+          <EmptyState icon={CalendarClock} title={t("emptyTitle")} description={t("emptyDescription")} />
+        )}
 
         {plans.map((p) => {
           const isOverdue = p.nextDueDate < today;
@@ -218,14 +314,18 @@ export default function PlannedPaymentsPage() {
               <CardContent className="py-4 space-y-3">
                 <div className="flex justify-between items-start gap-3">
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{p.counterparty || (isPay ? t("iPay") : t("iReceive"))}</p>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate font-medium">{p.counterparty || (isPay ? t("iPay") : t("iReceive"))}</p>
+                      <SharedChip groupId={p.groupId} />
+                    </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {isOverdue ? (
                         <Badge variant="destructive" className="text-xs">{t("overdue")}</Badge>
                       ) : (
                         <Badge variant="outline" className="text-xs">{isPay ? t("iPay") : t("iReceive")}</Badge>
                       )}
-                      <p className="text-xs text-muted-foreground">{t("dueOn", { date: p.nextDueDate })}</p>
+                      <p className="text-xs text-muted-foreground">{t("dueOn", { date: formatDate(p.nextDueDate) })}</p>
+                      {isPay && <span className="text-xs text-muted-foreground">{categoryName(p.categoryId)}</span>}
                       {p.isRecurring && (
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           <Repeat className="h-3 w-3" />
@@ -242,8 +342,11 @@ export default function PlannedPaymentsPage() {
                   <Button size="sm" className="flex-1" loading={payingId === p.id} onClick={() => markPaid(p)}>
                     {isPay ? t("markPaid") : t("markReceived")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => remove(p.id)}>
-                    {t("cancel")}
+                  <Button size="sm" variant="outline" onClick={() => startEdit(p)}>
+                    {t("edit")}
+                  </Button>
+                  <Button size="sm" variant="outline" loading={cancellingId === p.id} onClick={() => remove(p)}>
+                    {t("cancelPlan")}
                   </Button>
                 </div>
               </CardContent>
