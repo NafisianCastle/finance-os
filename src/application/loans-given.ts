@@ -124,7 +124,8 @@ export async function recoverLoanGiven(
   loan: LoanGiven,
   amountPoisha: number,
   accountId: string,
-  groupId: string | null = null
+  groupId: string | null = null,
+  note?: string
 ) {
   if (!isVisible(loan, userId, groupId)) return loan;
   const applied = Math.min(amountPoisha, loan.remainingPoisha);
@@ -138,7 +139,7 @@ export async function recoverLoanGiven(
       accountId,
       categoryId: "income",
       date: new Date().toISOString().slice(0, 10),
-      note: `Loan recovery — ${loan.borrower}`,
+      note: note ?? `Loan recovery — ${loan.borrower}`,
     },
     loan.groupId ?? null
   );

@@ -86,7 +86,7 @@ export default function LoansGivenPage() {
     }
     setIsRepaying(true);
     try {
-      await recoverLoanGiven(userId, loan, poisha, repayAccountId, groupId);
+      await recoverLoanGiven(userId, loan, poisha, repayAccountId, groupId, t("recoveryNote", { name: loan.borrower }));
       setRepayingId(null);
       setRepayAmount("");
       toast(t("repaymentRecorded"), "success");

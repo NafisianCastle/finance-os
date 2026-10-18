@@ -117,7 +117,8 @@ export async function repayDebt(
   debt: Debt,
   amountPoisha: number,
   accountId: string,
-  groupId: string | null = null
+  groupId: string | null = null,
+  note?: string
 ) {
   if (!isVisible(debt, userId, groupId)) return debt;
   const applied = Math.min(amountPoisha, debt.remainingPoisha);
@@ -131,7 +132,7 @@ export async function repayDebt(
       accountId,
       categoryId: "other",
       date: new Date().toISOString().slice(0, 10),
-      note: `Debt repayment — ${debt.lender}`,
+      note: note ?? `Debt repayment — ${debt.lender}`,
     },
     debt.groupId ?? null
   );

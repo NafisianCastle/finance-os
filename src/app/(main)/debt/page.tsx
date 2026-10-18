@@ -97,7 +97,7 @@ export default function DebtPage() {
     }
     setIsRepaying(true);
     try {
-      await repayDebt(userId, debt, poisha, repayAccountId, groupId);
+      await repayDebt(userId, debt, poisha, repayAccountId, groupId, t("repaymentNote", { name: debt.lender }));
       setRepayingId(null);
       setRepayAmount("");
       toast(t("repaymentRecorded"), "success");

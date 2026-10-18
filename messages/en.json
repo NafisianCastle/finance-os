@@ -318,7 +318,8 @@
     "delete": "Delete",
     "emptyTitle": "No debts",
     "emptyDescription": "Debts you add above will appear here.",
-    "actionFailed": "Something went wrong. Please try again."
+    "actionFailed": "Something went wrong. Please try again.",
+    "repaymentNote": "Debt repayment — {name}"
   },
   "Goals": {
     "title": "Goals",
@@ -471,7 +472,8 @@
     "delete": "Delete",
     "emptyTitle": "No loans given",
     "emptyDescription": "Money you lend to others will appear here.",
-    "actionFailed": "Something went wrong. Please try again."
+    "actionFailed": "Something went wrong. Please try again.",
+    "recoveryNote": "Loan recovery — {name}"
   },
   "Liabilities": {
     "title": "Held money",
