@@ -246,3 +246,41 @@ begin
       unique (budget_scope, ym_char6, category_id);
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 5. Balance trigger: also handle edits. 011's version only reacted to
+--    insert and soft-delete/undelete, so editing a transaction's amount,
+--    type or account(s) changed balances locally but never on the server —
+--    and the next pull then overwrote the correct local balance. Reverse the
+--    old row's effect (if it was live) and apply the new row's (if live).
+--    Re-upserting an unchanged row is a net no-op.
+-- ---------------------------------------------------------------------------
+create or replace function apply_transaction_balance_delta()
+returns trigger as $$
+begin
+  if tg_op = 'UPDATE' and old.deleted_at is null then
+    perform apply_transaction_effect(old, -1);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') and new.deleted_at is null then
+    perform apply_transaction_effect(new, 1);
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create or replace function apply_transaction_effect(tx transactions, sign int)
+returns void as $$
+begin
+  if tx.type_smallint = 1 then -- income
+    update accounts set balance_poisha = balance_poisha + sign * tx.amount_poisha
+      where id = tx.account_id;
+  elsif tx.type_smallint in (2, 3) then -- expense, or transfer source
+    update accounts set balance_poisha = balance_poisha - sign * tx.amount_poisha
+      where id = tx.account_id;
+    if tx.type_smallint = 3 and tx.to_account_id is not null then
+      update accounts set balance_poisha = balance_poisha + sign * tx.amount_poisha
+        where id = tx.to_account_id;
+    end if;
+  end if;
+end;
+$$ language plpgsql;

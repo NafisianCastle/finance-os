@@ -54,7 +54,8 @@ function generateInviteCode(): string {
   // Cryptographic randomness: the code is the only secret gating membership.
   const bytes = crypto.getRandomValues(new Uint8Array(INVITE_CODE_LENGTH));
   let code = "";
-  for (const b of bytes) code += INVITE_CODE_CHARS[b % INVITE_CODE_CHARS.length];
+  // The alphabet has exactly 32 chars, so the low 5 bits index it uniformly.
+  for (const b of bytes) code += INVITE_CODE_CHARS[b & 0x1f];
   return code;
 }
 
