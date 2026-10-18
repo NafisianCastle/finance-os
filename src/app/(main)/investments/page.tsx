@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,13 @@ import { AmountInput } from "@/components/ui/amount-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SharedChip, SharedToggle } from "@/components/shared-toggle";
 import { useAppStore } from "@/store/app-store";
+import type { InvestmentEvent } from "@/infrastructure/db/dexie/schema";
+import { TrendingUp, Trash2 } from "lucide-react";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import {
   INVESTMENT_TYPE,
@@ -20,6 +26,8 @@ import {
   loadInvestmentsWithEvents,
   createInvestment,
   addInvestmentEvent,
+  deleteInvestment,
+  deleteInvestmentEvent,
 } from "@/application/investments";
 import dynamic from "next/dynamic";
 import { startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from "date-fns";
@@ -50,8 +58,14 @@ type AnalyticsTab = "allocation" | "performers" | "income";
 
 export default function InvestmentsPage() {
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const t = useTranslations("Investments");
+  const locale = useLocale();
+  const { toast } = useToast();
+  const confirm = useConfirm();
   const { format, formatCompact, toMinor, currencyCode } = useCurrencyFormatter();
+  const formatDate = (d: string) =>
+    new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(parseISO(d));
 
   const TYPES = [
     { v: INVESTMENT_TYPE.DPS, l: t("typeDps") },
@@ -113,36 +127,48 @@ export default function InvestmentsPage() {
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [shared, setShared] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
 
   async function load() {
     if (!userId) return;
-    setRows(await loadInvestmentsWithEvents(userId));
+    setRows(await loadInvestmentsWithEvents(userId, groupId));
   }
 
   useEffect(() => {
     const timer = setTimeout(load, 0);
     return () => clearTimeout(timer);
-  }, [userId]);
+  }, [userId, groupId]);
 
   async function handleCreate() {
-    if (!userId || !name) return;
+    if (!userId) return;
+    if (!name.trim()) {
+      toast(t("enterNameError"), "error");
+      return;
+    }
+    const isUnitType = UNIT_TYPES.has(type);
+    const quantityNum = quantity ? parseFloat(quantity) : undefined;
+    const pricePerUnitPoisha = pricePerUnit ? toMinor(parseFloat(pricePerUnit)) : undefined;
+    const investedPoisha =
+      isUnitType && quantityNum && pricePerUnitPoisha
+        ? Math.round(quantityNum * pricePerUnitPoisha)
+        : toMinor(parseFloat(invested) || 0);
+    if (!(investedPoisha > 0)) {
+      toast(t("enterAmountError"), "error");
+      return;
+    }
     setIsCreating(true);
     try {
-      const isUnitType = UNIT_TYPES.has(type);
-      const quantityNum = quantity ? parseFloat(quantity) : undefined;
-      const pricePerUnitPoisha = pricePerUnit ? toMinor(parseFloat(pricePerUnit)) : undefined;
-      const investedPoisha =
-        isUnitType && quantityNum && pricePerUnitPoisha
-          ? Math.round(quantityNum * pricePerUnitPoisha)
-          : toMinor(parseFloat(invested) || 0);
       const declaredProfitPoisha = declaredProfit
         ? declaredProfitMode === "percent"
           ? Math.round(investedPoisha * (parseFloat(declaredProfit) / 100))
           : toMinor(parseFloat(declaredProfit))
         : undefined;
+      const trimmedName = name.trim();
       await createInvestment(userId, {
         type,
-        name,
+        name: trimmedName,
         investorName: investor || undefined,
         investedPoisha,
         declaredProfitPoisha,
@@ -152,33 +178,90 @@ export default function InvestmentsPage() {
         pricePerUnitPoisha: isUnitType ? pricePerUnitPoisha : undefined,
         interestRatePct: RATE_TYPES.has(type) && interestRatePct ? parseFloat(interestRatePct) : undefined,
         purity: GOLD_TYPES.has(type) ? purity : undefined,
-      });
+      }, shared ? groupId : null);
       setName(""); setInvestor(""); setInvested(""); setDeclaredProfit(""); setDeclaredProfitMode("amount"); setEndDate("");
       setQuantity(""); setPricePerUnit(""); setInterestRatePct("");
-      load();
+      await load();
+      toast(t("investmentAdded", { name: trimmedName }), "success");
+    } catch {
+      toast(t("actionFailed"), "error");
     } finally {
       setIsCreating(false);
     }
   }
 
   async function handleAddEvent(investmentId: string, investedPoisha: number) {
-    if (!userId || !eventAmount) return;
+    if (!userId) return;
+    const amountPoisha =
+      eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
+        ? Math.round(investedPoisha * ((parseFloat(eventAmount) || 0) / 100))
+        : toMinor(parseFloat(eventAmount) || 0);
+    if (!(amountPoisha > 0)) {
+      toast(t("enterAmountError"), "error");
+      return;
+    }
     setIsAddingEvent(true);
     try {
-      const amountPoisha =
-        eventType === INVESTMENT_EVENT_TYPE.PROFIT_DECLARED && eventAmountMode === "percent"
-          ? Math.round(investedPoisha * (parseFloat(eventAmount) / 100))
-          : toMinor(parseFloat(eventAmount) || 0);
       await addInvestmentEvent(userId, investmentId, {
         type: eventType,
         amountPoisha,
         eventDate,
-      });
+      }, groupId);
       setEventAmount("");
       setEventAmountMode("amount");
-      load();
+      await load();
+      toast(t("eventAdded"), "success");
+    } catch {
+      toast(t("actionFailed"), "error");
     } finally {
       setIsAddingEvent(false);
+    }
+  }
+
+  async function handleDeleteInvestment(id: string, invName: string) {
+    if (!userId) return;
+    const ok = await confirm({
+      title: t("deleteInvestmentTitle", { name: invName }),
+      description: t("deleteInvestmentDescription"),
+      confirmLabel: t("delete"),
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setDeletingId(id);
+    try {
+      await deleteInvestment(userId, id, groupId);
+      if (expanded === id) setExpanded(null);
+      await load();
+      toast(t("investmentDeleted", { name: invName }), "success");
+    } catch {
+      toast(t("actionFailed"), "error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleDeleteEvent(ev: InvestmentEvent) {
+    if (!userId) return;
+    const ok = await confirm({
+      title: t("deleteEventTitle"),
+      description: t("deleteEventDescription", {
+        label: INVESTMENT_EVENT_LABELS[ev.type] ?? "",
+        amount: format(ev.amountPoisha),
+        date: formatDate(ev.eventDate),
+      }),
+      confirmLabel: t("delete"),
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setDeletingEventId(ev.id);
+    try {
+      await deleteInvestmentEvent(userId, ev.id, groupId);
+      await load();
+      toast(t("eventDeleted"), "success");
+    } catch {
+      toast(t("actionFailed"), "error");
+    } finally {
+      setDeletingEventId(null);
     }
   }
 
@@ -215,7 +298,7 @@ export default function InvestmentsPage() {
         if (isWithinInterval(d, { start, end })) profit += ev.amountPoisha;
       }
     }
-    passiveTrend.push({ month: start.toLocaleString("en", { month: "short" }), profit });
+    passiveTrend.push({ month: new Intl.DateTimeFormat(locale, { month: "short" }).format(start), profit });
   }
   const totalPassive6m = passiveTrend.reduce((s, m) => s + m.profit, 0);
 
@@ -470,11 +553,15 @@ export default function InvestmentsPage() {
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
             </div>
+            <SharedToggle checked={shared} onChange={setShared} />
             <Button onClick={handleCreate} className="w-full" loading={isCreating}>{t("addInvestment")}</Button>
           </CardContent>
         </Card>
 
         {/* Investment list */}
+        {rows.length === 0 && (
+          <EmptyState icon={TrendingUp} title={t("emptyTitle")} description={t("emptyDescription")} />
+        )}
         {rows.map(({ investment: inv, metrics: m, events }) => (
           <Card key={inv.id} className={m.isLoss ? "border-destructive/40" : ""}>
             <CardContent className="pt-4 space-y-3">
@@ -485,10 +572,14 @@ export default function InvestmentsPage() {
               >
                 <div className="flex justify-between items-start gap-2">
                   <div>
-                    <p className="font-medium">{inv.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-medium">{inv.name}</p>
+                      <SharedChip groupId={inv.groupId} />
+                    </div>
                     {inv.investorName && <p className="text-xs text-muted-foreground">{inv.investorName}</p>}
                     <p className="text-xs text-muted-foreground mt-1">
-                      {inv.projectStartDate}{inv.projectEndDate ? ` → ${inv.projectEndDate}` : ""}
+                      {inv.projectStartDate ? formatDate(inv.projectStartDate) : ""}
+                      {inv.projectEndDate ? ` → ${formatDate(inv.projectEndDate)}` : ""}
                     </p>
                     {(inv.quantity || inv.interestRatePct || inv.purity) && (
                       <p className="text-xs text-muted-foreground mt-0.5">
@@ -564,9 +655,22 @@ export default function InvestmentsPage() {
                         .slice()
                         .sort((a, b) => b.eventDate.localeCompare(a.eventDate))
                         .map((e) => (
-                          <li key={e.id} className="flex justify-between">
-                            <span>{INVESTMENT_EVENT_LABELS[e.type]} · {e.eventDate}</span>
-                            <span>{format(e.amountPoisha)}</span>
+                          <li key={e.id} className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 truncate">{INVESTMENT_EVENT_LABELS[e.type]} · {formatDate(e.eventDate)}</span>
+                            <span className="flex shrink-0 items-center gap-1">
+                              {format(e.amountPoisha)}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0"
+                                aria-label={t("deleteEvent")}
+                                title={t("deleteEvent")}
+                                onClick={() => handleDeleteEvent(e)}
+                                loading={deletingEventId === e.id}
+                              >
+                                {deletingEventId !== e.id && <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </span>
                           </li>
                         ))}
                     </ul>
@@ -628,6 +732,15 @@ export default function InvestmentsPage() {
                     loading={isAddingEvent}
                   >
                     {t("addEvent", { label: INVESTMENT_EVENT_LABELS[eventType] })}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => handleDeleteInvestment(inv.id, inv.name)}
+                    loading={deletingId === inv.id}
+                  >
+                    {t("deleteInvestment")}
                   </Button>
                 </div>
               )}
