@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/NafisianCastle/finance-os/actions/workflows/ci.yml/badge.svg)](https://github.com/NafisianCastle/finance-os/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 [![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8)](#quick-start)
 
 **Your money, your device, your rules.** A local-first, installable personal finance PWA that works fully offline — no account required, cloud sync optional.
@@ -31,6 +31,7 @@ Most finance apps demand an account before you can add a single transaction, and
 - On-demand monthly reports (never stored in the cloud)
 - Multi-currency support with full internationalization (English / Bengali)
 - Installable PWA with offline support and background sync queue
+- **Household groups** — create a household, invite others with a code or link, and mark accounts, transactions, budgets and more as shared; personal records stay private (requires Supabase)
 
 ## Quick start
 
@@ -48,8 +49,9 @@ Open [http://localhost:3000](http://localhost:3000) → complete onboarding → 
 ## Supabase setup (optional)
 
 1. Create a free [Supabase](https://supabase.com) project
-2. Run migration: `supabase/migrations/001_mvp_schema.sql`
+2. Run every migration in `supabase/migrations/` in order, `001_mvp_schema.sql` through `012_groups_fixes.sql` (SQL editor or `supabase db push`)
 3. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
+4. For password reset emails, add `<your-origin>/reset-password` to the project's Auth → URL Configuration → Redirect URLs
 
 Without Supabase, the app runs fully offline with IndexedDB — no server, no signup.
 
@@ -67,7 +69,6 @@ Without Supabase, the app runs fully offline with IndexedDB — no server, no si
 - `src/domain/rules-engine/` — pure deterministic finance intelligence
 - `src/infrastructure/db/dexie/` — local-first storage
 - `src/infrastructure/sync/` — lean Supabase sync queue
-- `docs/` — design notes and post-MVP roadmap
 
 ## Smart Buy example
 
@@ -77,7 +78,7 @@ Tests: `tests/domain/rules-engine/`
 
 ## Tech stack
 
-Next.js 15 · TypeScript · Dexie (IndexedDB) · Supabase · Tailwind CSS · Radix UI · Vitest
+Next.js 16 · TypeScript · Dexie (IndexedDB) · Supabase · Tailwind CSS · Radix UI · Vitest
 
 ## Contributing
 

@@ -2,7 +2,7 @@
 
 import { getDb } from "@/infrastructure/db/dexie/database";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
-import { processSyncQueue, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
+import { processSyncQueue, pullRemoteChangesWithStatus } from "@/infrastructure/sync/sync-queue";
 import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 import { useEffect } from "react";
 
@@ -42,8 +42,15 @@ export function SyncOnFocus() {
         await withTimeout(processSyncQueue(uid, gid), SYNC_TIMEOUT_MS);
         const lastSyncedAt = useAppStore.getState().lastSyncedAt;
         const syncStartedAt = new Date().toISOString();
-        await withTimeout(pullRemoteChanges(uid, gid, lastSyncedAt), SYNC_TIMEOUT_MS);
-        useAppStore.getState().setLastSyncedAt(syncStartedAt);
+        const pull = await withTimeout(
+          pullRemoteChangesWithStatus(uid, gid, lastSyncedAt),
+          SYNC_TIMEOUT_MS
+        );
+        // Only advance the checkpoint after a complete pull. On failure or
+        // timeout (pull === undefined) keep the old one so the next cycle
+        // re-fetches everything since it — advancing would skip those rows
+        // forever.
+        if (pull?.ok) useAppStore.getState().setLastSyncedAt(syncStartedAt);
         const count = await getDb().syncQueue.count();
         setPending(count);
       } finally {

@@ -6,21 +6,20 @@ import {
   SYNC_WINDOW_DAYS,
 } from "@/lib/constants";
 import { createClient } from "@/infrastructure/supabase/client";
-import type { BuyEvaluation } from "@/infrastructure/db/dexie/schema";
+import type { BuyEvaluation, SyncQueueItem } from "@/infrastructure/db/dexie/schema";
 
 // Tables with a unique constraint other than the primary key — Supabase's
 // upsert() defaults to conflict-resolving on the primary key only, so any
 // other unique constraint must be named explicitly or upserts 23505 instead
 // of updating the existing row.
-const UNIQUE_CONFLICT_TARGETS: Record<string, string> = {
-  budgets: "user_id,ym_char6,category_id",
+//
+// budgets: budget_scope = coalesce(group_id, user_id) is a stored generated
+// column (migration 012), so one key covers personal and shared budgets.
+// Pre-012 clients still target 001's (user_id, ...) constraint, which the
+// server keeps for them.
+export const UNIQUE_CONFLICT_TARGETS: Record<string, string> = {
+  budgets: "budget_scope,ym_char6,category_id",
   user_profiles: "user_id",
-};
-
-// Grouped rows use a separate unique constraint (one shared budget per
-// group+month+category instead of per-author) — see migration 011.
-const GROUPED_UNIQUE_CONFLICT_TARGETS: Record<string, string> = {
-  budgets: "group_id,ym_char6,category_id",
 };
 
 // Tables that carry a group_id column (migration 011). user_profiles and
@@ -129,9 +128,11 @@ export async function processSyncQueue(
     syncable.push(item);
   }
 
+  const collapsed = collapseQueue(syncable);
+
   // Group by table+operation — each group can be sent as one batched request.
-  const groups = new Map<string, typeof items>();
-  for (const item of syncable) {
+  const groups = new Map<string, CollapsedItem[]>();
+  for (const item of collapsed) {
     const key = `${item.table}|${item.operation}`;
     const list = groups.get(key) ?? [];
     list.push(item);
@@ -145,31 +146,22 @@ export async function processSyncQueue(
       const chunk = groupItems.slice(i, i + SYNC_CHUNK_SIZE);
       const now = new Date().toISOString();
 
-      const isGroupScoped = groupId && GROUP_SCOPED_TABLES.has(table);
-
       const { error } =
         operation === "delete"
-          ? await (() => {
-              const del = supabase
-                .from(table)
-                .update({ deleted_at: now })
-                .in("id", chunk.map((c) => c.recordId));
-              // Grouped rows can be authored by any member, so a deleting
-              // member filters by the shared group scope, not their own
-              // user_id (which would silently skip teammates' rows).
-              return isGroupScoped ? del.eq("group_id", groupId) : del.eq("user_id", userId);
-            })()
-          : await (() => {
-              const rows = chunk.map((c) => ({
-                ...c.payload,
-                id: c.recordId,
-                user_id: userId,
-                ...(GROUP_SCOPED_TABLES.has(table) ? { group_id: groupId } : {}),
-                updated_at: now,
-              }));
-              const onConflict = isGroupScoped
-                ? GROUPED_UNIQUE_CONFLICT_TARGETS[table] ?? UNIQUE_CONFLICT_TARGETS[table]
-                : UNIQUE_CONFLICT_TARGETS[table];
+          ? // Filter by id only: RLS (migration 011) already limits the update
+            // to the caller's personal rows plus their group's shared rows,
+            // whoever authored them. An extra user_id/group_id filter would
+            // silently skip rows that are legitimately visible (a teammate's
+            // shared row, or a personal row deleted while in group mode).
+            await supabase
+              .from(table)
+              .update({ deleted_at: now })
+              .in("id", chunk.map((c) => c.recordId))
+          : await (async () => {
+              const rows = await Promise.all(
+                chunk.map((c) => toRemoteRow(table, c, userId, now))
+              );
+              const onConflict = UNIQUE_CONFLICT_TARGETS[table];
               return onConflict
                 ? supabase.from(table).upsert(rows, { onConflict })
                 : supabase.from(table).upsert(rows);
@@ -183,13 +175,102 @@ export async function processSyncQueue(
         );
       } else {
         pushed += chunk.length;
-        const localIds = chunk.map((c) => c.id).filter((id): id is string => !!id);
+        const localIds = chunk.flatMap((c) => c.queueIds);
         await db.syncQueue.bulkDelete(localIds);
       }
     }
   }
 
+  // groupId is no longer used for push (rows carry their own scope); the
+  // parameter stays for call-site compatibility.
+  void groupId;
+
   return { pushed, errors, lastError };
+}
+
+interface CollapsedItem {
+  table: string;
+  recordId: string;
+  operation: "upsert" | "delete";
+  payload: Record<string, unknown>;
+  /** Every queue entry folded into this one — all deleted on success. */
+  queueIds: string[];
+}
+
+/**
+ * Folds every queued entry for the same table+recordId into a single
+ * operation. Postgres rejects an upsert batch that touches the same row
+ * twice ("ON CONFLICT DO UPDATE command cannot affect row a second time"),
+ * which used to fail the whole chunk on every retry and stall the queue.
+ *
+ * Items arrive oldest-first. The newest operation wins:
+ * - upserts merge their payloads in order (later fields override earlier);
+ * - a delete discards any earlier upserts for the record;
+ * - an upsert after a delete starts a fresh merge (the record was recreated).
+ */
+export function collapseQueue(items: SyncQueueItem[]): CollapsedItem[] {
+  const byKey = new Map<string, CollapsedItem>();
+  for (const item of items) {
+    const key = `${item.table}|${item.recordId}`;
+    const prev = byKey.get(key);
+    const queueIds = [...(prev?.queueIds ?? []), ...(item.id ? [item.id] : [])];
+    if (item.operation === "delete" || !prev || prev.operation === "delete") {
+      // Re-insert so Map order reflects the latest operation's position.
+      byKey.delete(key);
+      byKey.set(key, {
+        table: item.table,
+        recordId: item.recordId,
+        operation: item.operation,
+        payload: { ...item.payload },
+        queueIds,
+      });
+    } else {
+      prev.payload = { ...prev.payload, ...item.payload };
+      prev.queueIds = queueIds;
+    }
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Builds the remote row for an upsert. The row keeps its own scope: shared
+ * rows stay in their group and teammates' rows keep their author. user_id /
+ * group_id come from the payload when present, else from the local Dexie row
+ * (covers partial writers and entries queued by older code), and user_id
+ * finally falls back to the current user for brand-new personal rows.
+ */
+async function toRemoteRow(
+  table: string,
+  item: CollapsedItem,
+  userId: string,
+  now: string
+): Promise<Record<string, unknown>> {
+  const payload = item.payload;
+  const hasUser = typeof payload.user_id === "string" && payload.user_id !== "";
+  const hasGroup = "group_id" in payload;
+  const isGroupScoped = GROUP_SCOPED_TABLES.has(table);
+
+  let local: { userId?: string; groupId?: string | null } | undefined;
+  if (!hasUser || (isGroupScoped && !hasGroup)) {
+    const localName = LOCAL_TABLES[table];
+    const localTable = localName ? (getDb() as any)[localName] : undefined;
+    local = localTable ? await localTable.get(item.recordId) : undefined;
+  }
+
+  const row: Record<string, unknown> = {
+    ...payload,
+    id: item.recordId,
+    user_id: hasUser ? payload.user_id : local?.userId ?? userId,
+    updated_at: now,
+  };
+  if (isGroupScoped) {
+    row.group_id = hasGroup ? (payload.group_id ?? null) : (local?.groupId ?? null);
+  } else {
+    delete row.group_id;
+  }
+  // Generated column (012) — inserting a value into it is an error.
+  delete row.budget_scope;
+  return row;
 }
 
 // Remote (snake_case Supabase row) → local (camelCase Dexie row) mappers.
@@ -429,11 +510,32 @@ export async function pullRemoteChanges(
   groupId: string | null,
   lastSyncedAt: string | null
 ): Promise<number> {
+  return (await pullRemoteChangesWithStatus(userId, groupId, lastSyncedAt)).pulled;
+}
+
+export interface PullResult {
+  pulled: number;
+  /** false when any table's pull failed — callers must NOT advance lastSyncedAt. */
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Same as pullRemoteChanges but reports failures. A failed table doesn't
+ * stop the others (merging is idempotent), but the result is ok: false so
+ * the caller keeps its checkpoint and the next pull retries from it.
+ */
+export async function pullRemoteChangesWithStatus(
+  userId: string,
+  groupId: string | null,
+  lastSyncedAt: string | null
+): Promise<PullResult> {
   const supabase = createClient();
-  if (!supabase) return 0;
+  if (!supabase) return { pulled: 0, ok: true };
 
   const db = getDb();
   let count = 0;
+  let pullError: string | undefined;
   const isInitialHydration = lastSyncedAt === null;
   const since = lastSyncedAt ?? "1970-01-01T00:00:00Z";
   const windowCutoff = new Date(
@@ -447,29 +549,34 @@ export async function pullRemoteChanges(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const localTable = (db as any)[localTableName];
 
-    // Page through in updated_at order until a page comes back under the
-    // batch size — a plain .limit() with no pagination silently drops any
-    // rows past the cap and this loop's caller advances lastSyncedAt
-    // regardless, so under-paging here means permanent data loss for users
-    // with >SYNC_BATCH_SIZE changes since their last sync.
-    const isGroupScoped = groupId && GROUP_SCOPED_TABLES.has(table);
+    // Page through in (updated_at, id) order until a page comes back under
+    // the batch size — a plain .limit() with no pagination silently drops
+    // any rows past the cap. The compound cursor matters: many rows can share
+    // one updated_at (bulk server updates), and a plain `updated_at > last`
+    // cursor would skip the rest of them at a page boundary.
+    const isGroupScoped = GROUP_SCOPED_TABLES.has(table);
 
-    let cursor = since;
+    let cursor: { updatedAt: string; id: string } | null = null;
     for (;;) {
-      let query = supabase
-        .from(table)
-        .select("*")
-        .gt("updated_at", cursor)
+      let query = supabase.from(table).select("*");
+      query = cursor
+        ? query.or(
+            `updated_at.gt."${cursor.updatedAt}",and(updated_at.eq."${cursor.updatedAt}",id.gt."${cursor.id}")`
+          )
+        : query.gt("updated_at", since);
+      query = query
         .order("updated_at", { ascending: true })
+        .order("id", { ascending: true })
         .limit(SYNC_BATCH_SIZE);
-      // Grouped: see everything shared in the group. Ungrouped: only the
-      // user's own not-yet-shared personal rows (explicit is_ null keeps
-      // intent clear rather than relying solely on RLS for correctness).
-      query = isGroupScoped
-        ? query.eq("group_id", groupId)
-        : GROUP_SCOPED_TABLES.has(table)
-          ? query.eq("user_id", userId).is("group_id", null)
-          : query.eq("user_id", userId);
+      // Group mode: no scope filter — RLS (011) returns exactly the user's
+      // personal rows plus every row shared with their group. Ungrouped:
+      // only the user's own personal rows (explicit filter keeps intent
+      // clear rather than relying solely on RLS for correctness).
+      if (!isGroupScoped) {
+        query = query.eq("user_id", userId);
+      } else if (!groupId) {
+        query = query.eq("user_id", userId).is("group_id", null);
+      }
 
       // New-device hydration: keep transactions to a recent rolling window so
       // the first sync stays fast; older months load lazily on demand (see
@@ -479,7 +586,11 @@ export async function pullRemoteChanges(
       }
 
       const { data, error } = await query;
-      if (error || !data) break;
+      if (error || !data) {
+        pullError = error?.message || error?.code || `no data for ${table}`;
+        console.error(`Pull failed for ${table}: ${pullError}`);
+        break;
+      }
 
       for (const remoteRow of data) {
         const mapped = mapper(remoteRow) as { id: string; updatedAt: string; groupId?: string | null };
@@ -496,11 +607,12 @@ export async function pullRemoteChanges(
       }
 
       if (data.length < SYNC_BATCH_SIZE) break;
-      cursor = (mapper(data[data.length - 1]) as { updatedAt: string }).updatedAt;
+      const last = data[data.length - 1] as { updated_at: string; id: string };
+      cursor = { updatedAt: last.updated_at, id: last.id };
     }
   }
 
-  return count;
+  return pullError ? { pulled: count, ok: false, error: pullError } : { pulled: count, ok: true };
 }
 
 /**
@@ -514,7 +626,7 @@ export async function pullHistoricalTransactions(
   userId: string,
   groupId: string | null,
   beforeDate?: string
-): Promise<{ count: number; oldestDate: string | null }> {
+): Promise<{ count: number; oldestDate: string | null; error?: string }> {
   const supabase = createClient();
   if (!supabase) return { count: 0, oldestDate: null };
 
@@ -530,21 +642,51 @@ export async function pullHistoricalTransactions(
     .select("*")
     .lt("tx_date", cutoff)
     .order("tx_date", { ascending: false })
+    .order("id", { ascending: false })
     .limit(HISTORICAL_PULL_BATCH_SIZE);
-  historyQuery = groupId
-    ? historyQuery.eq("group_id", groupId)
-    : historyQuery.eq("user_id", userId).is("group_id", null);
+  // Group mode: RLS returns personal-own + group rows; no extra filter.
+  if (!groupId) historyQuery = historyQuery.eq("user_id", userId).is("group_id", null);
 
   const { data, error } = await historyQuery;
 
-  if (error || !data || data.length === 0) return { count: 0, oldestDate: null };
+  if (error || !data) {
+    return {
+      count: 0,
+      oldestDate: null,
+      error: error?.message || error?.code || "no data",
+    };
+  }
+  if (data.length === 0) return { count: 0, oldestDate: null };
+
+  let rows = data;
+  // Callers page with beforeDate = oldestDate (exclusive), so a full page
+  // that cut the oldest day in half would skip that day's remaining rows
+  // forever. Complete the oldest day before reporting it.
+  if (data.length >= HISTORICAL_PULL_BATCH_SIZE) {
+    const oldestInPage = data.reduce(
+      (min, r) => ((r.tx_date as string) < min ? (r.tx_date as string) : min),
+      data[0].tx_date as string
+    );
+    let restQuery = supabase.from("transactions").select("*").eq("tx_date", oldestInPage);
+    if (!groupId) restQuery = restQuery.eq("user_id", userId).is("group_id", null);
+    const { data: rest, error: restError } = await restQuery;
+    if (restError || !rest) {
+      return {
+        count: 0,
+        oldestDate: null,
+        error: restError?.message || restError?.code || "no data",
+      };
+    }
+    const seen = new Set(data.map((r) => r.id as string));
+    rows = [...data, ...rest.filter((r) => !seen.has(r.id as string))];
+  }
 
   const mapper = REMOTE_MAPPERS.transactions;
   const localTable = db.transactions;
   let count = 0;
   let oldestDate: string | null = null;
 
-  for (const remoteRow of data) {
+  for (const remoteRow of rows) {
     const mapped = mapper(remoteRow) as {
       id: string;
       updatedAt: string;
@@ -741,10 +883,12 @@ export async function repairLocalBudgets(userId: string): Promise<void> {
 export async function forceFullResync(
   userId: string,
   groupId: string | null = null
-): Promise<{ pushed: number; errors: number; pulled: number }> {
+): Promise<{ pushed: number; errors: number; pulled: number; pullError?: string }> {
   const { pushed, errors } = await processSyncQueue(userId, groupId);
-  const pulled = await pullRemoteChanges(userId, groupId, null);
-  return { pushed, errors, pulled };
+  const pull = await pullRemoteChangesWithStatus(userId, groupId, null);
+  return pull.ok
+    ? { pushed, errors, pulled: pull.pulled }
+    : { pushed, errors, pulled: pull.pulled, pullError: pull.error };
 }
 
 const EXPORTABLE_TABLES = [
@@ -796,6 +940,10 @@ export async function pruneBuyEvaluations(userId: string) {
   const toRemove = all.slice(0, all.length - MAX_SYNC_BUY_EVALS);
   for (const rec of toRemove) {
     await db.buyEvaluations.delete(rec.id);
+    // Soft-delete remotely too, or the next full pull brings it right back.
+    // (A still-queued upsert for it is superseded by this delete — see
+    // collapseQueue.)
+    await enqueueSync("buy_evaluations", rec.id, "delete", { id: rec.id });
   }
 }
 

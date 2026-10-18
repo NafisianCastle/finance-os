@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
+import { SharedToggle } from "@/components/shared-toggle";
 import { useAppStore } from "@/store/app-store";
 import { createShoppingList, addShoppingListItem } from "@/application/shopping-lists";
 import { Plus, X } from "lucide-react";
@@ -17,19 +19,18 @@ export default function NewShoppingListPage() {
   const t = useTranslations("ShoppingLists");
   const router = useRouter();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
 
   const [name, setName] = useState(t("defaultName"));
   const [itemName, setItemName] = useState("");
   const [items, setItems] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [shared, setShared] = useState(true);
 
   useEffect(() => {
     if (!userId) return;
-    getDb()
-      .shoppingListItems.where("userId")
-      .equals(userId)
-      .filter((i) => !i.deletedAt)
+    scoped(getDb().shoppingListItems, userId, groupId)
       .toArray()
       .then((all) => {
         const counts: Record<string, number> = {};
@@ -40,7 +41,7 @@ export default function NewShoppingListPage() {
           .slice(0, 10);
         setSuggestions(sorted);
       });
-  }, [userId]);
+  }, [userId, groupId]);
 
   const filteredSuggestions = useMemo(
     () =>
@@ -65,9 +66,9 @@ export default function NewShoppingListPage() {
     if (!userId || !name.trim()) return;
     setSaving(true);
     try {
-      const list = await createShoppingList(userId, name.trim());
+      const list = await createShoppingList(userId, name.trim(), shared ? groupId : null);
       for (const item of items) {
-        await addShoppingListItem(userId, list.id, { name: item });
+        await addShoppingListItem(userId, list.id, { name: item }, groupId);
       }
       router.push(`/shopping-lists/${list.id}`);
     } finally {
@@ -133,7 +134,9 @@ export default function NewShoppingListPage() {
           </Card>
         )}
 
-        <Button className="w-full" onClick={save} disabled={saving || !name.trim()}>
+        <SharedToggle checked={shared} onChange={setShared} />
+
+        <Button className="w-full" onClick={save} loading={saving} disabled={!name.trim()}>
           {t("createList")}
         </Button>
       </div>

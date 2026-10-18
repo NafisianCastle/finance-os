@@ -3,8 +3,10 @@
 import { deleteTransaction, updateTransaction } from "@/application/transactions";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TransactionForm } from "@/components/transactions/transaction-form";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { isVisible } from "@/infrastructure/db/dexie/helpers";
 import type { Transaction } from "@/infrastructure/db/dexie/schema";
 import { useAppStore } from "@/store/app-store";
 import { useParams, useRouter } from "next/navigation";
@@ -15,9 +17,12 @@ import { Trash2 } from "lucide-react";
 export default function EditTransactionPage() {
   const t = useTranslations("NewTransaction");
   const tList = useTranslations("Transactions");
+  const tCommon = useTranslations("Common");
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
+  const confirm = useConfirm();
   const [tx, setTx] = useState<Transaction | null | undefined>(undefined);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -25,12 +30,18 @@ export default function EditTransactionPage() {
     if (!userId || !params.id) return;
     getDb()
       .transactions.get(params.id)
-      .then((found) => setTx(found && found.userId === userId && !found.deletedAt ? found : null));
-  }, [userId, params.id]);
+      .then((found) => setTx(found && isVisible(found, userId, groupId) ? found : null));
+  }, [userId, groupId, params.id]);
 
   async function handleDelete() {
     if (!userId || !tx) return;
-    if (!window.confirm(tList("deleteConfirm"))) return;
+    const ok = await confirm({
+      title: tList("delete"),
+      description: tList("deleteConfirm"),
+      confirmLabel: tCommon("delete"),
+      variant: "destructive",
+    });
+    if (!ok) return;
     setIsDeleting(true);
     try {
       await deleteTransaction(userId, tx.id);

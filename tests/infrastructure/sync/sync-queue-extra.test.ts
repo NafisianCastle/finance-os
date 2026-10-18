@@ -15,6 +15,7 @@ function createSupabaseMock(config: {
       eq: (...a: unknown[]) => { record("eq", a); return chain; },
       gt: (...a: unknown[]) => { record("gt", a); return chain; },
       gte: (...a: unknown[]) => { record("gte", a); return chain; },
+      or: (...a: unknown[]) => { record("or", a); return chain; },
       lt: (...a: unknown[]) => { record("lt", a); return chain; },
       is: (...a: unknown[]) => { record("is", a); return chain; },
       order: (...a: unknown[]) => { record("order", a); return chain; },
@@ -139,7 +140,7 @@ describe("processSyncQueue", () => {
 
     await processSyncQueue(USER_ID);
     const upsertCall = mock.calls.find((c) => c.method === "upsert" && c.table === "budgets");
-    expect(upsertCall?.args[1]).toEqual({ onConflict: "user_id,ym_char6,category_id" });
+    expect(upsertCall?.args[1]).toEqual({ onConflict: "budget_scope,ym_char6,category_id" });
   });
 
   it("sends a delete as a soft-delete update filtered by id and user_id", async () => {

@@ -1,4 +1,5 @@
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { getBudgetsForMonth, scoped } from "@/infrastructure/db/dexie/helpers";
 import { TX_TYPES, HELD_STATUS, LOAN_STATUS, PRIORITY } from "@/lib/constants";
 import { calculateNetWorth } from "@/domain/rules-engine/net-worth.rules";
 import { forecastCashflow } from "@/domain/rules-engine/cashflow.rules";
@@ -9,21 +10,22 @@ import { ymKey } from "@/lib/utils";
 import { computePortfolioValue } from "@/domain/investments/calculate";
 import type { InvestmentEvent, Transaction } from "@/infrastructure/db/dexie/schema";
 
-export async function getDashboardMetrics(userId: string, preloadedTransactions?: Transaction[]) {
+/** Metrics over everything visible to the user: own personal rows + rows shared with `groupId`. */
+export async function getDashboardMetrics(
+  userId: string,
+  preloadedTransactions?: Transaction[],
+  groupId: string | null = null
+) {
   const db = getDb();
-  const accounts = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
+  const accounts = await scoped(db.accounts, userId, groupId).toArray();
   const transactions =
     preloadedTransactions ??
-    (await db.transactions.where("userId").equals(userId).filter((t) => !t.deletedAt).toArray());
-  const debts = await db.debts.where("userId").equals(userId).filter((d) => !d.deletedAt && d.status === 1).toArray();
-  const held = await db.heldLiabilities.where("userId").equals(userId).filter((h) => !h.deletedAt && h.status === HELD_STATUS.ACTIVE).toArray();
-  const loans = await db.loansGiven.where("userId").equals(userId).filter((l) => !l.deletedAt && l.status !== LOAN_STATUS.RECOVERED).toArray();
-  const investments = await db.investments.where("userId").equals(userId).filter((i) => !i.deletedAt).toArray();
-  const invEvents = await db.investmentEvents
-    .where("userId")
-    .equals(userId)
-    .filter((e) => !e.deletedAt)
-    .toArray();
+    (await scoped(db.transactions, userId, groupId).toArray());
+  const debts = await scoped(db.debts, userId, groupId).and((d) => d.status === 1).toArray();
+  const held = await scoped(db.heldLiabilities, userId, groupId).and((h) => h.status === HELD_STATUS.ACTIVE).toArray();
+  const loans = await scoped(db.loansGiven, userId, groupId).and((l) => l.status !== LOAN_STATUS.RECOVERED).toArray();
+  const investments = await scoped(db.investments, userId, groupId).toArray();
+  const invEvents = await scoped(db.investmentEvents, userId, groupId).toArray();
   const eventsByInv = new Map<string, InvestmentEvent[]>();
   for (const e of invEvents) {
     const list = eventsByInv.get(e.investmentId) ?? [];
@@ -33,9 +35,9 @@ export async function getDashboardMetrics(userId: string, preloadedTransactions?
   const portfolioValue = computePortfolioValue(investments, eventsByInv);
   const profile = await db.userProfiles.where("userId").equals(userId).first();
   const ym = ymKey();
-  const budgets = await db.budgets.filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt).toArray();
-  const buyEvals = await db.buyEvaluations.where("userId").equals(userId).toArray();
-  const goals = await db.goals.where("userId").equals(userId).filter((g) => !g.deletedAt).toArray();
+  const budgets = await getBudgetsForMonth(userId, ym, groupId);
+  const buyEvals = await scoped(db.buyEvaluations, userId, groupId).toArray();
+  const goals = await scoped(db.goals, userId, groupId).toArray();
 
   const cashBankWallet = accounts.filter((a) => a.type !== 4).reduce((s, a) => s + a.balancePoisha, 0);
   const creditUsed = accounts.filter((a) => a.type === 4).reduce((s, a) => s + Math.abs(a.balancePoisha), 0);

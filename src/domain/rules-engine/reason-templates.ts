@@ -28,6 +28,49 @@ const TEMPLATES: Record<ReasonCode, (v: TemplateVars) => string> = {
     `Within healthy affordability band for your income`,
 };
 
+/**
+ * Message key (in the `SmartBuyReasons` namespace) for each reason code, plus
+ * the metadata params its message interpolates.
+ */
+export const REASON_MESSAGE: Record<ReasonCode, { key: string; params: string[] }> = {
+  [ReasonCode.INCOME_RATIO_HIGH]: { key: "incomeRatioHigh", params: ["ratioPct"] },
+  [ReasonCode.GADGET_CAP_EXCEEDED]: { key: "gadgetCapExceeded", params: ["capPct"] },
+  [ReasonCode.CATEGORY_CAP_EXCEEDED]: { key: "categoryCapExceeded", params: ["capPct"] },
+  [ReasonCode.BUDGET_OVERFLOW]: { key: "budgetOverflow", params: [] },
+  [ReasonCode.LIQUID_FLOOR_BREACH]: { key: "liquidFloorBreach", params: [] },
+  [ReasonCode.DTI_STRESS]: { key: "dtiStress", params: ["dtiPct"] },
+  [ReasonCode.GOAL_DELAY]: { key: "goalDelay", params: ["monthsDelayed"] },
+  [ReasonCode.IMPULSE_LUXURY]: { key: "impulseLuxury", params: [] },
+  [ReasonCode.CATEGORY_SPEND_UP]: { key: "categorySpendUp", params: ["trendPct"] },
+  [ReasonCode.EMERGENCY_IMPACT]: { key: "emergencyImpact", params: [] },
+  [ReasonCode.SAFE_WITHIN_BAND]: { key: "safeWithinBand", params: [] },
+};
+
+/** Minimal translator shape — pass `useTranslations("SmartBuyReasons")`. */
+export type ReasonTranslator = (key: string, values?: Record<string, string | number>) => string;
+
+/**
+ * Localized counterpart of reasonsToText: renders each code through the
+ * `SmartBuyReasons` namespace. Missing metadata renders as "?".
+ *
+ *   const tReasons = useTranslations("SmartBuyReasons");
+ *   reasonsToLocalizedText(result.reasonCodes, result.reasonMetadata, tReasons)
+ */
+export function reasonsToLocalizedText(
+  codes: ReasonCode[],
+  metadata: TemplateVars = {},
+  t: ReasonTranslator,
+): string[] {
+  return codes.map((code) => {
+    const msg = REASON_MESSAGE[code];
+    if (!msg) return t("fallback");
+    const values: Record<string, string | number> = {};
+    for (const p of msg.params) values[p] = metadata[p] ?? "?";
+    return t(msg.key, values);
+  });
+}
+
+/** English-only rendering; prefer reasonsToLocalizedText in UI code. */
 export function reasonsToText(
   codes: ReasonCode[],
   metadata: TemplateVars = {}

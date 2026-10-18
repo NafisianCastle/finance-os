@@ -1,4 +1,5 @@
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { getBudgetsForMonth, scoped } from "@/infrastructure/db/dexie/helpers";
 import { HELD_STATUS, TX_TYPES } from "@/lib/constants";
 import { ymKey } from "@/lib/utils";
 import type { RuleContext } from "@/domain/rules-engine/types";
@@ -6,23 +7,21 @@ import { subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 
 import { computePortfolioValue } from "@/domain/investments/calculate";
 import type { InvestmentEvent } from "@/infrastructure/db/dexie/schema";
 
+/** Builds the Smart Buy rule context over own personal rows + rows shared with `groupId`. */
 export async function buildRuleContext(
   userId: string,
-  categoryId: string
+  categoryId: string,
+  groupId: string | null = null
 ): Promise<RuleContext> {
   const db = getDb();
   const profile = await db.userProfiles.where("userId").equals(userId).first();
-  const accounts = await db.accounts.where("userId").equals(userId).filter((a) => !a.deletedAt).toArray();
-  const transactions = await db.transactions.where("userId").equals(userId).filter((t) => !t.deletedAt).toArray();
-  const debts = await db.debts.where("userId").equals(userId).filter((d) => !d.deletedAt && d.status === 1).toArray();
-  const held = await db.heldLiabilities.where("userId").equals(userId).filter((h) => !h.deletedAt && h.status === HELD_STATUS.ACTIVE).toArray();
-  const goals = await db.goals.where("userId").equals(userId).filter((g) => !g.deletedAt).toArray();
-  const investments = await db.investments.where("userId").equals(userId).filter((i) => !i.deletedAt).toArray();
-  const invEvents = await db.investmentEvents
-    .where("userId")
-    .equals(userId)
-    .filter((e) => !e.deletedAt)
-    .toArray();
+  const accounts = await scoped(db.accounts, userId, groupId).toArray();
+  const transactions = await scoped(db.transactions, userId, groupId).toArray();
+  const debts = await scoped(db.debts, userId, groupId).and((d) => d.status === 1).toArray();
+  const held = await scoped(db.heldLiabilities, userId, groupId).and((h) => h.status === HELD_STATUS.ACTIVE).toArray();
+  const goals = await scoped(db.goals, userId, groupId).toArray();
+  const investments = await scoped(db.investments, userId, groupId).toArray();
+  const invEvents = await scoped(db.investmentEvents, userId, groupId).toArray();
   const eventsByInv = new Map<string, InvestmentEvent[]>();
   for (const e of invEvents) {
     const list = eventsByInv.get(e.investmentId) ?? [];
@@ -31,9 +30,7 @@ export async function buildRuleContext(
   }
   const portfolioValue = computePortfolioValue(investments, eventsByInv);
   const ym = ymKey();
-  const budgets = await getDb()
-    .budgets.filter((b) => b.userId === userId && b.ym === ym && !b.deletedAt)
-    .toArray();
+  const budgets = await getBudgetsForMonth(userId, ym, groupId);
 
   const monthlyIncome = profile?.monthlyIncomePoisha ?? 0;
   const threeMonthsAgo = subMonths(new Date(), 3);

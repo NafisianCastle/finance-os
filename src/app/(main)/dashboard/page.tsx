@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { HealthCard } from "@/components/health-card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { useNotificationText } from "@/components/notification-center";
+import { SharedChip } from "@/components/shared-toggle";
+import { useCategoryName } from "@/hooks/use-category-name";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,13 +17,14 @@ import { useAppStore } from "@/store/app-store";
 import { useNotificationStore } from "@/store/notification-store";
 import { getDashboardMetrics } from "@/application/analytics";
 import { loadNotifications } from "@/application/notifications";
-import { markPlannedPaymentPaid } from "@/application/planned-payments";
+import { listPlannedPayments, markPlannedPaymentPaid } from "@/application/planned-payments";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { useToast } from "@/components/ui/toast";
 import dynamic from "next/dynamic";
 import { Brain, AlertTriangle, X, CalendarClock } from "lucide-react";
-import { SYSTEM_CATEGORIES, PLANNED_PAYMENT_DIRECTION, PLANNED_PAYMENT_STATUS } from "@/lib/constants";
+import { PLANNED_PAYMENT_DIRECTION, PLANNED_PAYMENT_STATUS } from "@/lib/constants";
 import type { PlannedPayment } from "@/infrastructure/db/dexie/schema";
 
 const IncomeExpenseTrendChart = dynamic(
@@ -32,10 +36,6 @@ const SpendBreakdownChart = dynamic(
   { ssr: false }
 );
 
-const CATEGORY_NAME: Record<string, string> = Object.fromEntries(
-  SYSTEM_CATEGORIES.map((c) => [c.id, c.name])
-);
-
 function maturityColor(score: number) {
   if (score >= 70) return "hsl(var(--success))";
   if (score >= 40) return "hsl(var(--warning))";
@@ -44,6 +44,9 @@ function maturityColor(score: number) {
 
 export default function DashboardPage() {
   const t = useTranslations("Dashboard");
+  const locale = useLocale();
+  const categoryName = useCategoryName();
+  const notificationText = useNotificationText();
   const { format, formatCompact } = useCurrencyFormatter();
   const MATURITY_LABELS: Record<string, string> = {
     budget: t("maturityBudget"),
@@ -62,6 +65,7 @@ export default function DashboardPage() {
     impulse: t("maturityImpulseDesc"),
   };
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const setNotifications = useNotificationStore((s) => s.setNotifications);
   const notifications = useNotificationStore((s) => s.notifications);
   const markRead = useNotificationStore((s) => s.markRead);
@@ -71,27 +75,45 @@ export default function DashboardPage() {
   const [upcomingPayments, setUpcomingPayments] = useState<PlannedPayment[]>([]);
   const [payingId, setPayingId] = useState<string | null>(null);
 
-  async function loadUpcomingPayments() {
+  const loadAll = useCallback(async () => {
     if (!userId) return;
-    const all = await getDb()
-      .plannedPayments.where("userId")
-      .equals(userId)
-      .filter((p) => !p.deletedAt && p.status === PLANNED_PAYMENT_STATUS.ACTIVE)
-      .sortBy("nextDueDate");
-    setUpcomingPayments(all.slice(0, 3));
-  }
+    const txs = await scoped(getDb().transactions, userId, groupId).toArray();
+    const [m, notifs, plans] = await Promise.all([
+      getDashboardMetrics(userId, txs, groupId),
+      loadNotifications(userId, txs, groupId),
+      listPlannedPayments(userId, groupId),
+    ]);
+    setMetrics(m);
+    setNotifications(notifs);
+    setUpcomingPayments(
+      plans
+        .filter((p) => p.status === PLANNED_PAYMENT_STATUS.ACTIVE)
+        .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate))
+        .slice(0, 3)
+    );
+  }, [userId, groupId, setNotifications]);
 
   async function confirmPaid(plan: PlannedPayment) {
     if (!userId) return;
     setPayingId(plan.id);
     try {
-      await markPlannedPaymentPaid(userId, plan);
+      await markPlannedPaymentPaid(userId, plan, groupId);
       toast(t("plannedPaymentRecorded"), "success");
-      loadUpcomingPayments();
+      // Paying moves balances and clears the "due" notification — refresh all.
+      await loadAll();
     } finally {
       setPayingId(null);
     }
   }
+
+  const dueDateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }),
+    [locale]
+  );
+  const formatDueDate = (ymd: string) => {
+    const d = new Date(`${ymd.slice(0, 10)}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? ymd : dueDateFormatter.format(d);
+  };
 
   const spendBreakdown = useMemo(() => {
     if (!metrics) return [];
@@ -99,10 +121,10 @@ export default function DashboardPage() {
     const topCategories = categoryEntries.slice(0, 4);
     const otherTotal = categoryEntries.slice(4).reduce((s, [, v]) => s + v, 0);
     return [
-      ...topCategories.map(([id, value]) => ({ name: CATEGORY_NAME[id] ?? id, value })),
+      ...topCategories.map(([id, value]) => ({ name: categoryName(id), value })),
       ...(otherTotal > 0 ? [{ name: t("other"), value: otherTotal }] : []),
     ];
-  }, [metrics, t]);
+  }, [metrics, t, categoryName]);
 
   const maturityBreakdown = useMemo(() => {
     if (!metrics) return [];
@@ -116,19 +138,9 @@ export default function DashboardPage() {
   }, [metrics, t]);
 
   useEffect(() => {
-    if (!userId) return;
-    (async () => {
-      const txs = await getDb()
-        .transactions.where("userId")
-        .equals(userId)
-        .filter((t) => !t.deletedAt)
-        .toArray();
-      setMetrics(await getDashboardMetrics(userId, txs));
-      setNotifications(await loadNotifications(userId, txs));
-      await loadUpcomingPayments();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, setNotifications]);
+    const timer = setTimeout(() => void loadAll(), 0);
+    return () => clearTimeout(timer);
+  }, [loadAll]);
 
   if (!metrics) {
     return (
@@ -153,6 +165,14 @@ export default function DashboardPage() {
   }
 
   const { netWorth, maturity, cashflow, income, expense, trend } = metrics;
+  // analytics labels trend months in English; the series always ends at the
+  // current month, so relabel each point with the locale's month name.
+  const monthFormatter = new Intl.DateTimeFormat(locale, { month: "short" });
+  const now = new Date();
+  const localizedTrend = trend.map((point, i) => ({
+    ...point,
+    month: monthFormatter.format(new Date(now.getFullYear(), now.getMonth() - (trend.length - 1 - i), 1)),
+  }));
 
   const overdueNotifs = notifications.filter(
     (n) =>
@@ -173,31 +193,31 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {visibleOverdue.map((n) => (
-          <Link
-            key={n.id}
-            href={n.href ?? "/more"}
-            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm"
-          >
-            <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-medium text-destructive">{n.title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>
-            </div>
-            <button
-              type="button"
-              aria-label={t("dismiss")}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                markRead(n.id);
-              }}
-              className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+        {visibleOverdue.map((n) => {
+          const text = notificationText(n);
+          return (
+            <div
+              key={n.id}
+              className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm"
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </Link>
-        ))}
+              <Link href={n.href ?? "/more"} className="flex flex-1 items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-destructive">{text.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{text.body}</p>
+                </div>
+              </Link>
+              <button
+                type="button"
+                aria-label={t("dismiss")}
+                onClick={() => markRead(n.id)}
+                className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          );
+        })}
 
         {hiddenOverdueCount > 0 && (
           <p className="text-xs text-muted-foreground px-1">
@@ -224,11 +244,14 @@ export default function DashboardPage() {
                 return (
                   <div key={p.id} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {p.counterparty || (isPay ? t("iPay") : t("iReceive"))}
-                      </p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className="truncate text-sm font-medium">
+                          {p.counterparty || (isPay ? t("iPay") : t("iReceive"))}
+                        </p>
+                        <SharedChip groupId={p.groupId} />
+                      </div>
                       <p className={`text-xs ${isDue ? "text-destructive" : "text-muted-foreground"}`}>
-                        {isDue ? t("dueNow") : t("dueOn", { date: p.nextDueDate })}
+                        {isDue ? t("dueNow") : t("dueOn", { date: formatDueDate(p.nextDueDate) })}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -272,7 +295,11 @@ export default function DashboardPage() {
               <CardTitle className="text-base">{t("financialMaturity")}</CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">{t("maturitySubtitle")}</p>
             </div>
-            <Badge variant="secondary">{maturity.level}</Badge>
+            {maturity.measuredCount >= 2 && (
+              <Badge variant="secondary">
+                {t(`maturityLevel_${maturity.level}` as "maturityLevel_Poor")}
+              </Badge>
+            )}
           </CardHeader>
           <CardContent className="space-y-2">
             {maturity.measuredCount < 2 ? (
@@ -284,6 +311,9 @@ export default function DashboardPage() {
                   <span className="text-muted-foreground pb-1">/ 100</span>
                 </div>
                 <Progress value={maturity.score} color={maturityColor(maturity.score)} />
+                <p className="text-xs text-muted-foreground">
+                  {t(`maturityLevelDesc_${maturity.level}` as "maturityLevelDesc_Poor")}
+                </p>
               </>
             )}
             {maturity.measuredCount >= 2 && maturity.measuredCount < maturity.totalCount && (
@@ -316,7 +346,13 @@ export default function DashboardPage() {
             <CardTitle className="text-base">{t("incomeVsExpense")}</CardTitle>
           </CardHeader>
           <CardContent className="h-40">
-            <IncomeExpenseTrendChart data={trend} format={format} formatCompact={formatCompact} />
+            <IncomeExpenseTrendChart
+              data={localizedTrend}
+              format={format}
+              formatCompact={formatCompact}
+              incomeLabel={t("income")}
+              expenseLabel={t("expenses")}
+            />
           </CardContent>
         </Card>
 
@@ -352,11 +388,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Link href="/smart-buy" className="block">
-          <Button variant="secondary" className="w-full">
-            <Brain className="h-4 w-4" />
-            {t("smartBuy")}
-          </Button>
+        <Link href="/smart-buy" className={buttonVariants({ variant: "secondary", className: "w-full" })}>
+          <Brain className="h-4 w-4" />
+          {t("smartBuy")}
         </Link>
       </div>
     </AppShell>

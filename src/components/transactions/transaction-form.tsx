@@ -4,10 +4,14 @@ import { Button } from "@/components/ui/button";
 import { AmountInput } from "@/components/ui/amount-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SharedToggle } from "@/components/shared-toggle";
+import { useToast } from "@/components/ui/toast";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
 import type { Account, Transaction } from "@/infrastructure/db/dexie/schema";
 import { TX_TYPES, SYSTEM_CATEGORIES } from "@/lib/constants";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
+import { useCategoryName } from "@/hooks/use-category-name";
 import { useAppStore } from "@/store/app-store";
 import { useEffect, useState, useRef } from "react";
 import { useTranslations } from "next-intl";
@@ -16,11 +20,22 @@ export interface TransactionFormValues {
   type: number;
   amountPoisha: number;
   accountId: string;
+  /** Destination account; set only for transfers (null otherwise, so an edit away from transfer clears it). */
+  toAccountId: string | null;
   categoryId: string;
   date: string;
   note?: string;
   merchant?: string;
+  /**
+   * Household group to share with (null = personal). Only present for new
+   * transactions — edits keep the record's existing groupId, so the key is
+   * omitted rather than overwriting it.
+   */
+  groupId?: string | null;
 }
+
+/** Category stored on transfers (they don't count as spending in any category). */
+const TRANSFER_CATEGORY_ID = "other";
 
 export function TransactionForm({
   initial,
@@ -34,13 +49,18 @@ export function TransactionForm({
   extraAction?: React.ReactNode;
 }) {
   const t = useTranslations("NewTransaction");
+  const categoryName = useCategoryName();
+  const { toast } = useToast();
   const { toMinor, toMajor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [type, setType] = useState<number>(initial?.type ?? TX_TYPES.EXPENSE);
   const [amount, setAmount] = useState(initial ? String(toMajor(initial.amountPoisha)) : "");
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "food");
   const [accountId, setAccountId] = useState(initial?.accountId ?? "");
+  const [toAccountId, setToAccountId] = useState(initial?.toAccountId ?? "");
+  const [shared, setShared] = useState(!!groupId);
   const [note, setNote] = useState(initial?.note ?? "");
   const [merchant, setMerchant] = useState(initial?.merchant ?? "");
   const [date, setDate] = useState(initial?.date ?? new Date().toISOString().slice(0, 10));
@@ -53,24 +73,23 @@ export function TransactionForm({
 
   useEffect(() => {
     if (!userId) return;
-    getDb()
-      .accounts.where("userId")
-      .equals(userId)
+    scoped(getDb().accounts, userId, groupId)
       .toArray()
       .then((a) => {
         setAccounts(a);
-        if (!initial && a[0]) setAccountId(a[0].id);
+        const sourceId = initial?.accountId ?? a[0]?.id;
+        if (!initial && sourceId) setAccountId(sourceId);
+        // Pre-select a destination different from the source for transfers.
+        if (!initial?.toAccountId) setToAccountId(a.find((x) => x.id !== sourceId)?.id ?? "");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, groupId]);
 
   // Load merchant suggestions when category changes
   useEffect(() => {
-    if (!userId || type === TX_TYPES.INCOME) return;
-    getDb()
-      .transactions.where("userId")
-      .equals(userId)
-      .filter((tx) => !tx.deletedAt && tx.type === TX_TYPES.EXPENSE && tx.categoryId === categoryId && !!tx.merchant)
+    if (!userId || type !== TX_TYPES.EXPENSE) return;
+    scoped(getDb().transactions, userId, groupId)
+      .filter((tx) => tx.type === TX_TYPES.EXPENSE && tx.categoryId === categoryId && !!tx.merchant)
       .toArray()
       .then((txs) => {
         const counts: Record<string, number> = {};
@@ -83,7 +102,7 @@ export function TransactionForm({
           .map(([name]) => name);
         setMerchantSuggestions(sorted);
       });
-  }, [userId, categoryId, type]);
+  }, [userId, groupId, categoryId, type]);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -102,18 +121,46 @@ export function TransactionForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!userId || !accountId) return;
+    if (!userId || loading) return;
+    if (!accountId) {
+      toast(t("errorAccountRequired"), "error");
+      return;
+    }
+    const amountPoisha = toMinor(parseFloat(amount) || 0);
+    if (!(amountPoisha > 0)) {
+      toast(t("errorAmountPositive"), "error");
+      return;
+    }
+    const isTransfer = type === TX_TYPES.TRANSFER;
+    if (isTransfer && !toAccountId) {
+      toast(t("errorToAccountRequired"), "error");
+      return;
+    }
+    if (isTransfer && toAccountId === accountId) {
+      toast(t("errorSameAccount"), "error");
+      return;
+    }
+
     setLoading(true);
-    await onSubmit({
-      type,
-      amountPoisha: toMinor(parseFloat(amount) || 0),
-      accountId,
-      categoryId: type === TX_TYPES.INCOME ? "income" : categoryId,
-      date,
-      note: note || undefined,
-      merchant: merchant || undefined,
-    });
-    setLoading(false);
+    try {
+      await onSubmit({
+        type,
+        amountPoisha,
+        accountId,
+        toAccountId: isTransfer ? toAccountId : null,
+        categoryId:
+          type === TX_TYPES.INCOME ? "income" : isTransfer ? TRANSFER_CATEGORY_ID : categoryId,
+        date,
+        note: note || undefined,
+        merchant: type === TX_TYPES.EXPENSE ? merchant || undefined : undefined,
+        ...(initial ? {} : { groupId: shared && groupId ? groupId : null }),
+      });
+    } catch (err) {
+      console.error(err);
+      toast(t("saveFailed"), "error");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const typeOptions = [
@@ -149,8 +196,11 @@ export function TransactionForm({
       </div>
 
       <div className="space-y-2">
-        <Label>{t("accountLabel")}</Label>
+        <Label htmlFor="tx-account">
+          {type === TX_TYPES.TRANSFER ? t("fromAccountLabel") : t("accountLabel")}
+        </Label>
         <select
+          id="tx-account"
           className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
           value={accountId}
           onChange={(e) => setAccountId(e.target.value)}
@@ -161,7 +211,28 @@ export function TransactionForm({
         </select>
       </div>
 
-      {type !== TX_TYPES.INCOME && (
+      {type === TX_TYPES.TRANSFER && (
+        <div className="space-y-2">
+          <Label htmlFor="tx-to-account">{t("toAccountLabel")}</Label>
+          <select
+            id="tx-to-account"
+            className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+            value={toAccountId}
+            onChange={(e) => setToAccountId(e.target.value)}
+          >
+            <option value="" disabled>
+              {t("selectAccount")}
+            </option>
+            {accounts
+              .filter((a) => a.id !== accountId)
+              .map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+          </select>
+        </div>
+      )}
+
+      {type === TX_TYPES.EXPENSE && (
         <div className="space-y-2">
           <Label>{t("categoryLabel")}</Label>
           <select
@@ -170,7 +241,7 @@ export function TransactionForm({
             onChange={(e) => setCategoryId(e.target.value)}
           >
             {SYSTEM_CATEGORIES.filter((c) => !["income", "savings", "investment"].includes(c.id)).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>{categoryName(c.id)}</option>
             ))}
           </select>
         </div>
@@ -207,6 +278,8 @@ export function TransactionForm({
         <Label>{t("noteLabel")}</Label>
         <Input value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
+
+      {!initial && <SharedToggle checked={shared} onChange={setShared} />}
 
       <Button type="submit" className="w-full" loading={loading}>
         {submitLabel}

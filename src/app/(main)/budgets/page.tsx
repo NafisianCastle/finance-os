@@ -9,11 +9,14 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SharedChip, SharedToggle } from "@/components/shared-toggle";
+import { useCategoryName } from "@/hooks/use-category-name";
 import {
   budgetHealthScore,
   suggestBudgets,
 } from "@/domain/rules-engine/budget-suggest.rules";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { getBudgetsForMonth, scoped } from "@/infrastructure/db/dexie/helpers";
 import type { Budget, Category } from "@/infrastructure/db/dexie/schema";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
 import { enqueueSync, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
@@ -25,6 +28,20 @@ import { endOfMonth, isWithinInterval, parseISO, startOfMonth } from "date-fns";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { v4 as uuid } from "uuid";
+
+/** Full remote `budgets` row (snake_case) for an upsert — includes user_id + group_id. */
+function toBudgetPayload(b: Budget): Record<string, unknown> {
+  return {
+    id: b.id,
+    user_id: b.userId,
+    group_id: b.groupId ?? null,
+    ym_char6: b.ym,
+    category_id: b.categoryId,
+    allocated_poisha: b.allocatedPoisha,
+    carry_poisha: b.carryPoisha ?? 0,
+    deleted_at: b.deletedAt ?? null,
+  };
+}
 
 function budgetHealthLevel(score: number) {
   if (score >= 85) return "Excellent";
@@ -43,6 +60,8 @@ export default function BudgetsPage() {
   const t = useTranslations("Budgets");
   const { format, toMinor, toMajor, currencyCode } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
+  const categoryName = useCategoryName();
   const { toast } = useToast();
   const confirm = useConfirm();
   const [loaded, setLoaded] = useState(false);
@@ -57,6 +76,7 @@ export default function BudgetsPage() {
   const [adding, setAdding] = useState(false);
   const [newCategoryId, setNewCategoryId] = useState("");
   const [newAmountBdt, setNewAmountBdt] = useState("");
+  const [shared, setShared] = useState(true);
   const [error, setError] = useState<string>("");
   const [isApplyingSuggestions, setIsApplyingSuggestions] = useState(false);
   const [isSubmittingBudget, setIsSubmittingBudget] = useState(false);
@@ -75,10 +95,17 @@ export default function BudgetsPage() {
     // since-1970 full pull when the local cache is actually empty; otherwise
     // reuse the normal incremental checkpoint (SyncOnFocus already keeps it
     // fresh) so a Budgets-page mount doesn't repeat a full 11-table pull.
+    // This pull never advances the lastSyncedAt checkpoint (SyncOnFocus owns
+    // that), so a failed table pull is harmless here — the duplicate guard
+    // below then just works from the local cache.
     if (isSupabaseConfigured()) {
-      const localBudgetCount = await db.budgets.where("userId").equals(userId).count();
-      const lastSyncedAt = localBudgetCount === 0 ? null : useAppStore.getState().lastSyncedAt;
-      await pullRemoteChanges(userId, useAppStore.getState().groupId, lastSyncedAt);
+      try {
+        const localBudgetCount = await scoped(db.budgets, userId, groupId).count();
+        const lastSyncedAt = localBudgetCount === 0 ? null : useAppStore.getState().lastSyncedAt;
+        await pullRemoteChanges(userId, groupId, lastSyncedAt);
+      } catch (err) {
+        console.error("Budgets pull failed", err);
+      }
     }
 
     // Load categories
@@ -96,16 +123,10 @@ export default function BudgetsPage() {
       .first();
     const inc = profile?.monthlyIncomePoisha ?? 0;
     setIncome(inc);
-    const b = await db.budgets
-      .filter((bg) => bg.userId === userId && bg.ym === ym && !bg.deletedAt)
-      .toArray();
+    const b = await getBudgetsForMonth(userId, ym, groupId);
     setBudgets(b);
 
-    const txs = await db.transactions
-      .where("userId")
-      .equals(userId)
-      .filter((t) => !t.deletedAt)
-      .toArray();
+    const txs = await scoped(db.transactions, userId, groupId).toArray();
     const start = startOfMonth(new Date());
     const end = endOfMonth(new Date());
     const spent: Record<string, number> = {};
@@ -127,7 +148,8 @@ export default function BudgetsPage() {
   useEffect(() => {
     const timer = setTimeout(load, 0);
     return () => clearTimeout(timer);
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, groupId]);
 
   async function applySuggestions() {
     if (!userId) return;
@@ -144,14 +166,18 @@ export default function BudgetsPage() {
       for (const s of suggestions) {
         const existing = budgets.find((b) => b.categoryId === s.categoryId);
         if (existing) {
+          const updated: Budget = { ...existing, allocatedPoisha: s.suggestedPoisha, updatedAt: now };
           await db.budgets.update(existing.id, {
             allocatedPoisha: s.suggestedPoisha,
             updatedAt: now,
           });
+          await enqueueSync("budgets", existing.id, "upsert", toBudgetPayload(updated));
         } else {
-          const rec = {
+          // Suggested budgets are shared with the household by default.
+          const rec: Budget = {
             id: uuid(),
             userId,
+            groupId: groupId ?? null,
             ym,
             categoryId: s.categoryId,
             allocatedPoisha: s.suggestedPoisha,
@@ -160,13 +186,7 @@ export default function BudgetsPage() {
             updatedAt: now,
           };
           await db.budgets.put(rec as never);
-          await enqueueSync("budgets", rec.id, "upsert", {
-            id: rec.id,
-            ym_char6: ym,
-            category_id: s.categoryId,
-            allocated_poisha: s.suggestedPoisha,
-            carry_poisha: 0,
-          });
+          await enqueueSync("budgets", rec.id, "upsert", toBudgetPayload(rec));
         }
       }
       await load();
@@ -195,13 +215,12 @@ export default function BudgetsPage() {
       const now = new Date().toISOString();
       const poisha = toMinor(amount);
       await db.budgets.update(b.id, { allocatedPoisha: poisha, updatedAt: now });
-      await enqueueSync("budgets", b.id, "upsert", {
-        id: b.id,
-        ym_char6: b.ym,
-        category_id: b.categoryId,
-        allocated_poisha: poisha,
-        carry_poisha: b.carryPoisha ?? 0,
-      });
+      await enqueueSync(
+        "budgets",
+        b.id,
+        "upsert",
+        toBudgetPayload({ ...b, allocatedPoisha: poisha, updatedAt: now })
+      );
       setEditingId(null);
       await load();
       toast(t("budgetUpdated"), "success");
@@ -218,7 +237,7 @@ export default function BudgetsPage() {
 
   async function deleteBudget(b: Budget) {
     if (!userId) return;
-    const catName = categoryMap[b.categoryId]?.name || b.categoryId;
+    const catName = categoryName(categoryMap[b.categoryId] ?? b.categoryId);
     const ok = await confirm({
       title: t("deleteBudgetTitle", { name: catName }),
       description: t("deleteBudgetDescription"),
@@ -231,14 +250,12 @@ export default function BudgetsPage() {
       const db = getDb();
       const now = new Date().toISOString();
       await db.budgets.update(b.id, { deletedAt: now, updatedAt: now });
-      await enqueueSync("budgets", b.id, "upsert", {
-        id: b.id,
-        ym_char6: b.ym,
-        category_id: b.categoryId,
-        allocated_poisha: b.allocatedPoisha,
-        carry_poisha: b.carryPoisha ?? 0,
-        deleted_at: now,
-      });
+      await enqueueSync(
+        "budgets",
+        b.id,
+        "upsert",
+        toBudgetPayload({ ...b, deletedAt: now, updatedAt: now })
+      );
       await load();
       toast(t("budgetDeleted", { name: catName }), "success");
     } finally {
@@ -258,9 +275,16 @@ export default function BudgetsPage() {
       return;
     }
 
+    const targetGroupId = shared && groupId ? groupId : null;
     const existing = budgets.find((b) => b.categoryId === newCategoryId);
     if (existing) {
-      setError(t("budgetAlreadyExists"));
+      if ((existing.groupId ?? null) !== targetGroupId) {
+        // One budget per category per month: a personal and a shared budget
+        // for the same category can't coexist.
+        toast(t(existing.groupId ? "budgetExistsShared" : "budgetExistsPersonal"), "error");
+      } else {
+        setError(t("budgetAlreadyExists"));
+      }
       return;
     }
 
@@ -269,24 +293,19 @@ export default function BudgetsPage() {
       const db = getDb();
       const ym = ymKey();
       const now = new Date().toISOString();
-      const rec = {
+      const rec: Budget = {
         id: uuid(),
         userId,
+        groupId: targetGroupId,
         ym,
         categoryId: newCategoryId,
         allocatedPoisha: toMinor(amount),
         carryPoisha: 0,
         createdAt: now,
         updatedAt: now,
-      } as Budget;
+      };
       await db.budgets.put(rec as never);
-      await enqueueSync("budgets", rec.id, "upsert", {
-        id: rec.id,
-        ym_char6: ym,
-        category_id: rec.categoryId,
-        allocated_poisha: rec.allocatedPoisha,
-        carry_poisha: 0,
-      });
+      await enqueueSync("budgets", rec.id, "upsert", toBudgetPayload(rec));
       setAdding(false);
       setNewCategoryId("");
       setNewAmountBdt("");
@@ -383,7 +402,7 @@ export default function BudgetsPage() {
                       <option value="">{t("selectCategoryPlaceholder")}</option>
                       {categories.map((cat) => (
                         <option key={cat.id} value={cat.id}>
-                          {cat.name}
+                          {categoryName(cat)}
                         </option>
                       ))}
                     </select>
@@ -397,6 +416,7 @@ export default function BudgetsPage() {
                       placeholder={t("enterAmount")}
                     />
                   </div>
+                  <SharedToggle checked={shared} onChange={setShared} />
                   <div className="flex gap-2">
                     <Button onClick={addBudget} loading={isSubmittingBudget}>{t("add")}</Button>
                     <Button
@@ -432,11 +452,17 @@ export default function BudgetsPage() {
                       {categories
                         .filter(
                           (cat) =>
-                            !budgets.some((b) => b.categoryId === cat.id),
+                            // Only hide same-scope duplicates; picking a category
+                            // budgeted in the other scope explains why via a toast.
+                            !budgets.some(
+                              (b) =>
+                                b.categoryId === cat.id &&
+                                (b.groupId ?? null) === (shared && groupId ? groupId : null),
+                            ),
                         )
                         .map((cat) => (
                           <option key={cat.id} value={cat.id}>
-                            {cat.name}
+                            {categoryName(cat)}
                           </option>
                         ))}
                     </select>
@@ -450,6 +476,7 @@ export default function BudgetsPage() {
                       placeholder={t("enterAmount")}
                     />
                   </div>
+                  <SharedToggle checked={shared} onChange={setShared} />
                   <div className="flex gap-2">
                     <Button onClick={addBudget} loading={isSubmittingBudget}>{t("add")}</Button>
                     <Button
@@ -472,15 +499,18 @@ export default function BudgetsPage() {
               const total = b.allocatedPoisha + b.carryPoisha;
               const pct = total > 0 ? Math.min(100, (spent / total) * 100) : 0;
               const over = spent > total;
-              const catName = categoryMap[b.categoryId]?.name || b.categoryId;
+              const catName = categoryName(categoryMap[b.categoryId] ?? b.categoryId);
               return (
                 <Card
                   key={b.id}
                   className={cn("transition-colors hover:bg-accent/40", over && "border-destructive/50")}
                 >
                   <CardContent className="pt-4 space-y-2">
-                    <div className="flex justify-between gap-3 capitalize">
-                      <span className="min-w-0 truncate font-medium">{catName}</span>
+                    <div className="flex justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium">{catName}</span>
+                        <SharedChip groupId={b.groupId} />
+                      </span>
                       <span className="shrink-0 text-sm text-muted-foreground">
                         {format(spent)} / {format(total)}
                       </span>

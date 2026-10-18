@@ -5,7 +5,7 @@ import { majorToMinorUnits } from "@/lib/money";
 import type { UserProfile, Account, Category } from "@/infrastructure/db/dexie/schema";
 import { enqueueSync, pullRemoteChanges } from "@/infrastructure/sync/sync-queue";
 import { isSupabaseConfigured } from "@/infrastructure/supabase/client";
-import { useAppStore } from "@/store/app-store";
+import { LOCAL_USER_ID, useAppStore } from "@/store/app-store";
 
 export async function seedUserData(
   userId: string,
@@ -21,7 +21,8 @@ export async function seedUserData(
   // Local Dexie is empty on a fresh browser/device — pull from Supabase before
   // seeding fresh default accounts, otherwise a user who already onboarded on
   // another browser gets duplicate "Cash"/"Bank" accounts created here.
-  if (!existing?.onboardingComplete && isSupabaseConfigured()) {
+  // The signed-out local user has no remote rows, so skip the round trip.
+  if (!existing?.onboardingComplete && isSupabaseConfigured() && userId !== LOCAL_USER_ID) {
     await pullRemoteChanges(userId, useAppStore.getState().groupId, null);
     existing = await db.userProfiles.where("userId").equals(userId).first();
   }
@@ -79,6 +80,7 @@ export async function seedUserData(
 
   await enqueueSync("user_profiles", profile.id, "upsert", {
     id: profile.id,
+    user_id: profile.userId,
     monthly_income_poisha: profile.monthlyIncomePoisha,
     currency_code: profile.currencyCode,
     locale: profile.locale,
@@ -89,6 +91,8 @@ export async function seedUserData(
   for (const acc of accounts) {
     await enqueueSync("accounts", acc.id, "upsert", {
       id: acc.id,
+      user_id: acc.userId,
+      group_id: null,
       type_smallint: acc.type,
       name: acc.name,
       balance_poisha: acc.balancePoisha,

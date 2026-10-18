@@ -103,7 +103,7 @@ describe("loadNotifications", () => {
     await getDb().transactions.put(tx);
 
     const notifications = await loadNotifications(USER_ID);
-    expect(notifications.some((n) => n.type === "budget_overspend" && n.title.includes("food"))).toBe(true);
+    expect(notifications.some((n) => n.type === "budget_overspend" && n.titleKey === "budgetOverspentTitle" && n.params.categoryId === "food")).toBe(true);
   });
 
   it("sorts notifications high priority first", async () => {
