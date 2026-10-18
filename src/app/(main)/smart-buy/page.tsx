@@ -12,12 +12,14 @@ import { Progress } from "@/components/ui/progress";
 import { evaluateSmartBuy } from "@/domain/rules-engine/evaluate";
 import {
   formatSafeRange,
-  reasonsToText,
+  reasonsToLocalizedText,
   recoLabel,
   tierLabel,
 } from "@/domain/rules-engine/reason-templates";
 import type { SmartBuyResult } from "@/domain/rules-engine/types";
 import { getDb } from "@/infrastructure/db/dexie/database";
+import { scoped } from "@/infrastructure/db/dexie/helpers";
+import { useCategoryName } from "@/hooks/use-category-name";
 import {
   enqueueSync,
   pruneBuyEvaluations,
@@ -29,12 +31,16 @@ import { useAppStore } from "@/store/app-store";
 import { useToast } from "@/components/ui/toast";
 import type { BuyEvaluation } from "@/infrastructure/db/dexie/schema";
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { v4 as uuid } from "uuid";
 export default function SmartBuyPage() {
   const t = useTranslations("SmartBuy");
+  const tReasons = useTranslations("SmartBuyReasons");
+  const uiLocale = useLocale();
+  const categoryName = useCategoryName();
   const { format, toMinor, currencyCode, locale } = useCurrencyFormatter();
   const userId = useAppStore((s) => s.userId);
+  const groupId = useAppStore((s) => s.groupId);
   const { toast } = useToast();
   const [product, setProduct] = useState("");
   const [categoryId, setCategoryId] = useState("gadgets");
@@ -84,41 +90,48 @@ export default function SmartBuyPage() {
 
   async function loadHistory() {
     if (!userId) return;
-    const list = await getDb()
-      .buyEvaluations.where("userId")
-      .equals(userId)
-      .filter((e) => !e.deletedAt)
-      .toArray();
+    const list = await scoped(getDb().buyEvaluations, userId, groupId).toArray();
     setHistory(list.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }
 
   useEffect(() => {
     const timer = setTimeout(loadHistory, 0);
     return () => clearTimeout(timer);
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, groupId]);
 
   // Auto-evaluate when price, category, or priority changes
   useEffect(() => {
+    // Ignore results of a superseded evaluation (inputs changed mid-await).
+    let cancelled = false;
     async function autoEvaluate() {
-      if (!userId || !price) return;
+      if (!userId) return;
+      const amount = parseFloat(price);
+      if (!price || !(amount > 0)) {
+        setResult(null);
+        return;
+      }
 
       try {
-        const ctx = await buildRuleContext(userId, categoryId);
+        const ctx = await buildRuleContext(userId, categoryId, groupId);
         const input = {
           productName: product,
           categoryId,
-          pricePoisha: toMinor(parseFloat(price) || 0),
+          pricePoisha: toMinor(amount),
           priority,
         };
         const res = evaluateSmartBuy(ctx, input);
-        setResult(res);
+        if (!cancelled) setResult(res);
       } catch (error) {
         console.error("Error auto-evaluating smart buy:", error);
       }
     }
 
-    autoEvaluate();
-  }, [userId, price, categoryId, priority, product]);
+    void autoEvaluate();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, groupId, price, categoryId, priority, product, toMinor]);
 
   async function handleEvaluate() {
     if (!userId || !result) return;
@@ -127,9 +140,11 @@ export default function SmartBuyPage() {
     try {
       const now = new Date().toISOString();
       const pricePoisha = toMinor(parseFloat(price) || 0);
-      const evalRecord = {
+      // Buy evaluations are personal decisions — never shared with the group.
+      const evalRecord: BuyEvaluation = {
         id: uuid(),
         userId,
+        groupId: null,
         productName: product.slice(0, 80),
         categoryId,
         pricePoisha,
@@ -148,7 +163,7 @@ export default function SmartBuyPage() {
         "buy_evaluations",
         evalRecord.id,
         "upsert",
-        toLeanBuyEval(evalRecord),
+        { ...toLeanBuyEval(evalRecord), user_id: evalRecord.userId, group_id: null },
       );
       await loadHistory();
       toast(
@@ -181,7 +196,7 @@ export default function SmartBuyPage() {
           >
             {categoryOptions.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {categoryName(c)}
               </option>
             ))}
           </select>
@@ -206,7 +221,7 @@ export default function SmartBuyPage() {
             ))}
           </div>
         </div>
-        <Button className="w-full" onClick={handleEvaluate} loading={isSaving}>
+        <Button className="w-full" onClick={handleEvaluate} loading={isSaving} disabled={!result}>
           {t("saveEvaluation")}
         </Button>
 
@@ -238,7 +253,7 @@ export default function SmartBuyPage() {
               <div>
                 <p className="text-sm font-medium mb-2">{t("reasoning")}</p>
                 <ul className="list-disc pl-4 text-sm text-muted-foreground space-y-1">
-                  {reasonsToText(result.reasonCodes, result.reasonMetadata).map((r, i) => (
+                  {reasonsToLocalizedText(result.reasonCodes, result.reasonMetadata, tReasons).map((r, i) => (
                     <li key={i}>{r}</li>
                   ))}
                 </ul>
@@ -267,7 +282,8 @@ export default function SmartBuyPage() {
                   <div className="min-w-0">
                     <p className="truncate font-medium">{h.productName || t("untitled")}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {format(h.pricePoisha)} · {new Date(h.createdAt).toLocaleDateString()}
+                      {format(h.pricePoisha)} · {categoryName(h.categoryId)} ·{" "}
+                      {new Intl.DateTimeFormat(uiLocale, { dateStyle: "medium" }).format(new Date(h.createdAt))}
                     </p>
                   </div>
                   <Badge variant={h.tier >= 5 ? "destructive" : "secondary"} className="shrink-0">

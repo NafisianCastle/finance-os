@@ -219,7 +219,12 @@
     "dueOn": "নির্ধারিত তারিখ {date}",
     "iPay": "আমি দেব",
     "iReceive": "আমি পাব",
-    "plannedPaymentRecorded": "পেমেন্ট রেকর্ড করা হয়েছে।"
+    "plannedPaymentRecorded": "পেমেন্ট রেকর্ড করা হয়েছে।",
+    "maturityLevel_Poor": "দুর্বল",
+    "maturityLevel_Improving": "উন্নতি হচ্ছে",
+    "maturityLevel_Stable": "স্থিতিশীল",
+    "maturityLevel_Disciplined": "সুশৃঙ্খল",
+    "maturityLevel_Wealth Builder": "সম্পদ নির্মাতা"
   },
   "Transactions": {
     "title": "কার্যক্রম",
@@ -228,7 +233,13 @@
     "emptyDescription": "ট্র্যাকিং শুরু করতে আপনার প্রথম আয় বা খরচ যোগ করুন।",
     "delete": "লেনদেন মুছুন",
     "deleteConfirm": "এই লেনদেনটি মুছবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।",
-    "notFound": "লেনদেন পাওয়া যায়নি।"
+    "notFound": "লেনদেন পাওয়া যায়নি।",
+    "loadOlder": "পুরোনো লেনদেন লোড করুন",
+    "loadOlderFailed": "পুরোনো লেনদেন লোড করা যায়নি। আবার চেষ্টা করুন।",
+    "noOlderTransactions": "লোড করার মতো আর কোনো পুরোনো লেনদেন নেই।",
+    "transferRoute": "{from} → {to}",
+    "unknownAccount": "অজানা অ্যাকাউন্ট",
+    "transfer": "স্থানান্তর"
   },
   "Budgets": {
     "title": "বাজেট",
@@ -262,7 +273,9 @@
     "budgetDeleted": "\"{name}\" বাজেট মুছে ফেলা হয়েছে।",
     "selectCategory": "একটি ক্যাটাগরি নির্বাচন করুন",
     "budgetAlreadyExists": "এই ক্যাটাগরির জন্য ইতিমধ্যে বাজেট আছে। সম্পাদনা ব্যবহার করুন।",
-    "budgetAdded": "বাজেট যোগ করা হয়েছে।"
+    "budgetAdded": "বাজেট যোগ করা হয়েছে।",
+    "budgetExistsShared": "এই মাসে এই ক্যাটাগরির জন্য পরিবারের একটি শেয়ার করা বাজেট আছে। সেটিই সম্পাদনা করুন।",
+    "budgetExistsPersonal": "এই মাসে এই ক্যাটাগরির জন্য আপনার একটি ব্যক্তিগত বাজেট আছে। আগে সেটি সম্পাদনা করুন বা মুছুন।"
   },
   "Debt": {
     "title": "ঋণ",
@@ -558,7 +571,18 @@
     "overspentOn": "{category}-এ অতিরিক্ত ব্যয়",
     "maturityLevel": "পরিপক্বতার স্তর: {level}",
     "lowCashForecast": "কম নগদ পূর্বাভাস — বিবেচনামূলক ব্যয় কমান",
-    "noMajorIssues": "এই মাসে বড় কোনো সমস্যা নেই — চালিয়ে যান!"
+    "noMajorIssues": "এই মাসে বড় কোনো সমস্যা নেই — চালিয়ে যান!",
+    "csvDate": "তারিখ",
+    "csvType": "ধরন",
+    "csvCategory": "ক্যাটাগরি",
+    "csvAmount": "পরিমাণ ({currency})",
+    "csvAccount": "অ্যাকাউন্ট",
+    "csvToAccount": "প্রাপক অ্যাকাউন্ট",
+    "csvMerchant": "বিক্রেতা",
+    "csvNote": "নোট",
+    "csvTypeIncome": "আয়",
+    "csvTypeExpense": "খরচ",
+    "csvTypeTransfer": "স্থানান্তর"
   },
   "NewTransaction": {
     "title": "লেনদেন যোগ করুন",
