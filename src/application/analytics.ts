@@ -5,7 +5,7 @@ import { calculateNetWorth } from "@/domain/rules-engine/net-worth.rules";
 import { forecastCashflow } from "@/domain/rules-engine/cashflow.rules";
 import { computeMaturityScore } from "@/domain/rules-engine/maturity.rules";
 import { budgetHealthScore } from "@/domain/rules-engine/budget-suggest.rules";
-import { startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from "date-fns";
+import { startOfMonth, endOfMonth, subMonths, parseISO } from "date-fns";
 import { ymKey } from "@/lib/utils";
 import { computePortfolioValue } from "@/domain/investments/calculate";
 import type { InvestmentEvent, Transaction } from "@/infrastructure/db/dexie/schema";
@@ -17,15 +17,25 @@ export async function getDashboardMetrics(
   groupId: string | null = null
 ) {
   const db = getDb();
-  const accounts = await scoped(db.accounts, userId, groupId).toArray();
-  const transactions =
-    preloadedTransactions ??
-    (await scoped(db.transactions, userId, groupId).toArray());
-  const debts = await scoped(db.debts, userId, groupId).and((d) => d.status === 1).toArray();
-  const held = await scoped(db.heldLiabilities, userId, groupId).and((h) => h.status === HELD_STATUS.ACTIVE).toArray();
-  const loans = await scoped(db.loansGiven, userId, groupId).and((l) => l.status !== LOAN_STATUS.RECOVERED).toArray();
-  const investments = await scoped(db.investments, userId, groupId).toArray();
-  const invEvents = await scoped(db.investmentEvents, userId, groupId).toArray();
+  const ym = ymKey();
+  // Start independent reads together instead of waiting for each IndexedDB
+  // round trip before issuing the next one.
+  const [
+    accounts, transactions, debts, held, loans, investments, invEvents,
+    profile, budgets, buyEvals, goals,
+  ] = await Promise.all([
+    scoped(db.accounts, userId, groupId).toArray(),
+    preloadedTransactions ?? scoped(db.transactions, userId, groupId).toArray(),
+    scoped(db.debts, userId, groupId).and((d) => d.status === 1).toArray(),
+    scoped(db.heldLiabilities, userId, groupId).and((h) => h.status === HELD_STATUS.ACTIVE).toArray(),
+    scoped(db.loansGiven, userId, groupId).and((l) => l.status !== LOAN_STATUS.RECOVERED).toArray(),
+    scoped(db.investments, userId, groupId).toArray(),
+    scoped(db.investmentEvents, userId, groupId).toArray(),
+    db.userProfiles.where("userId").equals(userId).first(),
+    getBudgetsForMonth(userId, ym, groupId),
+    scoped(db.buyEvaluations, userId, groupId).toArray(),
+    scoped(db.goals, userId, groupId).toArray(),
+  ]);
   const eventsByInv = new Map<string, InvestmentEvent[]>();
   for (const e of invEvents) {
     const list = eventsByInv.get(e.investmentId) ?? [];
@@ -33,11 +43,6 @@ export async function getDashboardMetrics(
     eventsByInv.set(e.investmentId, list);
   }
   const portfolioValue = computePortfolioValue(investments, eventsByInv);
-  const profile = await db.userProfiles.where("userId").equals(userId).first();
-  const ym = ymKey();
-  const budgets = await getBudgetsForMonth(userId, ym, groupId);
-  const buyEvals = await scoped(db.buyEvaluations, userId, groupId).toArray();
-  const goals = await scoped(db.goals, userId, groupId).toArray();
 
   const cashBankWallet = accounts.filter((a) => a.type !== 4).reduce((s, a) => s + a.balancePoisha, 0);
   const creditUsed = accounts.filter((a) => a.type === 4).reduce((s, a) => s + Math.abs(a.balancePoisha), 0);
@@ -51,16 +56,34 @@ export async function getDashboardMetrics(
     activeHeldLiabilitiesPoisha: held.reduce((s, h) => s + h.amountPoisha, 0),
   });
 
-  const monthStart = startOfMonth(new Date());
-  const monthEnd = endOfMonth(new Date());
+  const now = new Date();
+  const monthStart = startOfMonth(now).getTime();
+  const monthEnd = endOfMonth(now).getTime();
+  const trendMonths = [2, 1, 0].map((offset) => {
+    const start = startOfMonth(subMonths(now, offset));
+    return {
+      start: start.getTime(),
+      end: endOfMonth(start).getTime(),
+      month: start.toLocaleString("en", { month: "short" }),
+      income: 0,
+      expense: 0,
+    };
+  });
   let income = 0;
   let expense = 0;
   let impulseExpensePoisha = 0;
   const byCategory: Record<string, number> = {};
 
   for (const tx of transactions) {
-    const d = parseISO(tx.date);
-    if (!isWithinInterval(d, { start: monthStart, end: monthEnd })) continue;
+    const timestamp = parseISO(tx.date).getTime();
+    // Parse each date once for both the trend and current-month metrics.
+    for (const month of trendMonths) {
+      if (!(timestamp >= month.start && timestamp <= month.end)) continue;
+      if (tx.type === TX_TYPES.INCOME) month.income += tx.amountPoisha;
+      if (tx.type === TX_TYPES.EXPENSE) month.expense += tx.amountPoisha;
+      break;
+    }
+    if (!(timestamp >= monthStart && timestamp <= monthEnd)) continue;
     if (tx.type === TX_TYPES.INCOME) income += tx.amountPoisha;
     if (tx.type === TX_TYPES.EXPENSE) {
       expense += tx.amountPoisha;
@@ -122,25 +145,7 @@ export async function getDashboardMetrics(
       .filter(Boolean),
   });
 
-  const last3 = subMonths(new Date(), 3);
-  const trend: { month: string; income: number; expense: number }[] = [];
-  for (let i = 2; i >= 0; i--) {
-    const start = startOfMonth(subMonths(new Date(), i));
-    const end = endOfMonth(subMonths(new Date(), i));
-    let inc = 0;
-    let exp = 0;
-    for (const tx of transactions) {
-      const d = parseISO(tx.date);
-      if (!isWithinInterval(d, { start, end })) continue;
-      if (tx.type === TX_TYPES.INCOME) inc += tx.amountPoisha;
-      if (tx.type === TX_TYPES.EXPENSE) exp += tx.amountPoisha;
-    }
-    trend.push({
-      month: start.toLocaleString("en", { month: "short" }),
-      income: inc,
-      expense: exp,
-    });
-  }
+  const trend = trendMonths.map(({ month, income, expense }) => ({ month, income, expense }));
 
   return { netWorth, maturity, cashflow, income, expense, byCategory, trend };
 }
